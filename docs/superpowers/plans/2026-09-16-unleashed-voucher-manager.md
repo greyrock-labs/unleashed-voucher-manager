@@ -858,7 +858,9 @@ git commit -m "feat: add Unleashed guest pass model and XML parsing"
 In `backend/Cargo.toml`, change the `reqwest` line and add a dev-dependency section:
 
 ```toml
-reqwest = { version = "0.13.4", features = ["json", "query", "cookies"] }
+# "form" is required for RequestBuilder::form(), which the login POST uses;
+# without it the crate does not compile against reqwest 0.13.4.
+reqwest = { version = "0.13.4", features = ["json", "query", "cookies", "form"] }
 
 [dev-dependencies]
 wiremock = "0.6"
