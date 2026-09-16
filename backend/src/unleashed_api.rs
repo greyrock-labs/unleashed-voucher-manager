@@ -45,6 +45,23 @@ fn is_login_page(body: &str) -> bool {
     body.trim_start().starts_with("<!DOCTYPE html>")
 }
 
+#[derive(Debug)]
+pub enum CreateOutcome {
+    Created(Box<GuestPass>),
+    /// The controller rejected the name as a duplicate, so the pass already
+    /// existed and nothing was created.
+    AlreadyExists,
+}
+
+/// Attribute values are interpolated into XML, so escape them.
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('\'', "&apos;")
+        .replace('"', "&quot;")
+}
+
 impl UnleashedApi {
     pub async fn try_new() -> Result<Self, String> {
         let environment: &Environment = ENVIRONMENT.get().expect("Environment not set");
@@ -172,5 +189,68 @@ impl UnleashedApi {
         }
         debug!("Re-authenticated and retried successfully");
         Ok(body)
+    }
+
+    /// All guest passes known to the controller.
+    pub async fn list_passes(&self) -> Result<Vec<GuestPass>, UnleashedError> {
+        let body = self.call("getstat", "system", "<guest-list/>").await?;
+        parse_guest_list(&body)
+    }
+
+    /// Ask the controller to mint a pass code for our SSID.
+    pub async fn generate_key(&self) -> Result<String, UnleashedError> {
+        let inner = format!(
+            "<xcmd cmd='generate-guest-key' ssid='{}'/>",
+            xml_escape(&self.environment.unleashed_ssid)
+        );
+        let body = self.call("docmd", "system", &inner).await?;
+        parse_generated_key(&body)
+    }
+
+    /// Create a single guest pass.
+    ///
+    /// `duration_hours` is always sent with `duration-unit='hour'`: the
+    /// controller silently treats 'day' as hours, so `1 day` would yield a
+    /// one-hour pass.
+    pub async fn create_pass(
+        &self,
+        req: &CreatePassRequest,
+    ) -> Result<CreateOutcome, UnleashedError> {
+        let name = sanitize_pass_name(&req.name)
+            .map_err(|e| UnleashedError::Controller { msg: e })?;
+
+        let key = self.generate_key().await?;
+        let inner = format!(
+            "<xcmd cmd='create-guest' name='{}' ssid='{}' x-key='{}' \
+             duration='{}' duration-unit='hour' share-number='{}' \
+             reauth-enabled='false'/>",
+            xml_escape(&name),
+            xml_escape(&self.environment.unleashed_ssid),
+            xml_escape(&key),
+            req.duration_hours,
+            req.share_number,
+        );
+
+        let body = self.call("docmd", "system", &inner).await?;
+
+        if let Some(msg) = controller_error(&body) {
+            if msg == DUPLICATE_NAME_MSG {
+                return Ok(CreateOutcome::AlreadyExists);
+            }
+            return Err(UnleashedError::Controller { msg });
+        }
+
+        // The create response carries the pass, but re-listing is the only
+        // way to get the controller-assigned id consistently.
+        let created = self
+            .list_passes()
+            .await?
+            .into_iter()
+            .find(|p| p.name == name)
+            .ok_or_else(|| {
+                UnleashedError::Parse(format!("created pass '{name}' not found in list"))
+            })?;
+
+        Ok(CreateOutcome::Created(Box::new(created)))
     }
 }
