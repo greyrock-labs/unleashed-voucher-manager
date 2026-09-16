@@ -1417,7 +1417,6 @@ In `backend/src/main.rs`, replace the imports and the `Router` block:
 use backend::{
     environment::{ENVIRONMENT, Environment},
     handlers::*,
-    tasks::run_daily_rotation,
     unleashed_api::{UNLEASHED_API, UnleashedApi},
 };
 ```
@@ -1438,7 +1437,8 @@ use backend::{
         }
     }
 
-    tokio::spawn(run_daily_rotation());
+    // The daily rotation task is spawned in Task 6, which supplies it.
+    // Wiring the spawn here would leave the crate uncompilable until then.
 
     let cors = CorsLayer::new()
         .allow_headers([http::header::CONTENT_TYPE])
@@ -1466,7 +1466,7 @@ use axum::{
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `cd backend && cargo test handlers`
-Expected: PASS, 3 tests. `cargo build` fails until Task 6 supplies `run_daily_rotation`, which this task's `main.rs` now spawns — that is the only outstanding symbol.
+Expected: PASS, 3 tests, and `cargo build` still succeeds. The daily rotation is deliberately NOT spawned here — Task 6 adds both the function and its spawn together, so the tree never goes red.
 
 - [ ] **Step 6: Commit**
 
@@ -1481,6 +1481,7 @@ git commit -m "feat: replace voucher routes with guest pass routes"
 
 **Files:**
 - Modify: `backend/src/tasks.rs` (full rewrite)
+- Modify: `backend/src/main.rs` (add the `tasks::run_daily_rotation` import and spawn it after the client is initialised)
 - Test: `backend/src/tasks.rs` (inline `#[cfg(test)] mod tests`)
 
 **Interfaces:**
@@ -1625,15 +1626,29 @@ pub async fn run_daily_rotation() {
 }
 ```
 
-- [ ] **Step 4: Run the full test suite**
+- [ ] **Step 4: Spawn the task from main**
+
+Task 5 deliberately left this out so the crate stayed compilable. Add the
+import and the spawn to `backend/src/main.rs`, after the Unleashed client is
+initialised and before the router is built:
+
+```rust
+use backend::tasks::run_daily_rotation;
+```
+
+```rust
+    tokio::spawn(run_daily_rotation());
+```
+
+- [ ] **Step 5: Run the full test suite**
 
 Run: `cd backend && cargo test`
 Expected: PASS, all tests. The crate now builds — `cargo build` should succeed.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add backend/src/tasks.rs
+git add backend/src/tasks.rs backend/src/main.rs
 git commit -m "feat: replace daily purge with daily pass rotation"
 ```
 
