@@ -27,12 +27,18 @@ These apply to every task. Values are copied verbatim from the spec and were eac
 
 ---
 
-### Task 1: Environment configuration
+### Task 1: Environment configuration and UniFi removal
 
-Replace UniFi configuration with Unleashed configuration. This lands first because every later backend task reads `Environment`.
+Replace UniFi configuration with Unleashed configuration, and strip the UniFi
+backend so the crate still compiles. This lands first because every later
+backend task reads `Environment` -- and because renaming those fields breaks
+`unifi_api.rs`, which would leave the crate uncompilable (and therefore
+untestable) for the next five tasks.
 
 **Files:**
 - Modify: `backend/src/environment.rs` (full rewrite of the struct and `try_new`)
+- Delete: `backend/src/unifi_api.rs`
+- Modify: `backend/src/lib.rs`, `backend/src/handlers.rs`, `backend/src/tasks.rs`, `backend/src/main.rs` (reduce to a compiling skeleton)
 - Test: `backend/src/environment.rs` (inline `#[cfg(test)] mod tests`)
 
 **Interfaces:**
@@ -253,15 +259,111 @@ impl Environment {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 4: Remove the UniFi backend, leaving a compiling skeleton**
 
-Run: `cd backend && cargo test environment`
-Expected: PASS, 5 tests. The crate will not yet compile as a whole — `unifi_api.rs` still references the old fields. That is expected and fixed in Task 4; run `cargo test --lib environment` if the build blocks you, or temporarily comment the `unifi_api` line in `lib.rs`.
-
-- [ ] **Step 5: Commit**
+Renaming the `Environment` fields breaks `unifi_api.rs`, which breaks
+`handlers.rs`, `tasks.rs` and `main.rs`. Rather than leave the crate
+uncompilable until Task 6, strip it back to something that builds now. Later
+tasks fill it in.
 
 ```bash
-git add backend/src/environment.rs
+git rm backend/src/unifi_api.rs
+```
+
+`backend/src/lib.rs`:
+
+```rust
+pub mod environment;
+pub mod handlers;
+pub mod models;
+pub mod tasks;
+```
+
+`backend/src/handlers.rs` — deliberately does not touch `models`, because
+Task 2 rewrites that module:
+
+```rust
+use axum::response::Json;
+use tracing::debug;
+
+pub async fn health_check_handler() -> Json<serde_json::Value> {
+    debug!("Received health check request");
+    Json(serde_json::json!({ "status": "ok" }))
+}
+```
+
+`backend/src/tasks.rs`:
+
+```rust
+//! Scheduled tasks. The daily pass rotation lands in a later task.
+```
+
+`backend/src/main.rs` — keep tracing and environment setup, drop the API
+client and the spawned task:
+
+```rust
+use axum::{Router, http::{self, Method}, routing::get};
+use tower_http::cors::{Any, CorsLayer};
+use tracing::{error, info, level_filters::LevelFilter};
+use tracing_subscriber::EnvFilter;
+
+use backend::{
+    environment::{ENVIRONMENT, Environment},
+    handlers::*,
+};
+
+#[tokio::main]
+async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_env_var("BACKEND_LOG_LEVEL")
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
+
+    let env = match Environment::try_new() {
+        Ok(env) => env,
+        Err(e) => {
+            error!("Failed to load environment variables: {e}");
+            std::process::exit(1);
+        }
+    };
+    ENVIRONMENT.set(env).expect("Failed to set environment variables");
+    let environment = ENVIRONMENT.get().expect("Environment not set");
+
+    let cors = CorsLayer::new()
+        .allow_headers([http::header::CONTENT_TYPE])
+        .allow_methods([Method::POST, Method::GET])
+        .allow_origin(Any);
+
+    let app = Router::new()
+        .route("/api/health", get(health_check_handler))
+        .layer(cors);
+
+    let bind_address = format!(
+        "{}:{}",
+        environment.backend_bind_host, environment.backend_bind_port
+    );
+    let listener = tokio::net::TcpListener::bind(&bind_address)
+        .await
+        .expect("Could not bind listener");
+
+    info!("Server running on http://{}", bind_address);
+    axum::serve(listener, app).await.expect("Axum server should never error");
+}
+```
+
+- [ ] **Step 5: Verify the whole crate builds and the tests pass**
+
+Run: `cd backend && cargo build && cargo test`
+Expected: build succeeds, 5 tests pass. From here every task starts green.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add -A backend
 git commit -m "feat: replace UniFi config with Unleashed config"
 ```
 
@@ -958,7 +1060,7 @@ pub mod unleashed_api;
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `cd backend && cargo test --test session`
-Expected: PASS, 2 tests. The crate still will not build fully — `handlers.rs` and `tasks.rs` reference the UniFi client until Task 5.
+Expected: PASS, 2 tests, and `cargo build` still succeeds — Task 1 already reduced `handlers.rs` and `tasks.rs` to a compiling skeleton.
 
 - [ ] **Step 6: Commit**
 
@@ -1362,7 +1464,7 @@ use axum::{
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `cd backend && cargo test handlers`
-Expected: PASS, 3 tests. (Full `cargo build` still fails until Task 6 rewrites `tasks.rs`.)
+Expected: PASS, 3 tests. `cargo build` fails until Task 6 supplies `run_daily_rotation`, which this task's `main.rs` now spawns — that is the only outstanding symbol.
 
 - [ ] **Step 6: Commit**
 
@@ -1540,7 +1642,6 @@ git commit -m "feat: replace daily purge with daily pass rotation"
 **Files:**
 - Modify: `frontend/src/types/voucher.ts` → replace contents (keep the path; renaming ripples through many imports and buys nothing)
 - Modify: `frontend/src/utils/api.ts`
-- Delete: `frontend/src/types/print.ts`
 
 **Interfaces:**
 - Consumes: the backend routes from Task 5.
@@ -1625,18 +1726,12 @@ export const api = {
 };
 ```
 
-- [ ] **Step 3: Delete the print types**
-
-```bash
-git rm frontend/src/types/print.ts
-```
-
-- [ ] **Step 4: Verify the types compile in isolation**
+- [ ] **Step 3: Verify the types compile in isolation**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: FAIL, but only with errors in components that still reference removed fields — those are fixed in Task 8. Confirm there are no errors reported inside `types/voucher.ts` or `utils/api.ts` themselves.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add frontend/src/types frontend/src/utils/api.ts
@@ -1648,7 +1743,8 @@ git commit -m "refactor: replace voucher types with guest pass types"
 ### Task 8: Strip removed features and rebrand the frontend
 
 **Files:**
-- Delete: `frontend/src/app/print/`, `frontend/src/app/welcome/`, `frontend/src/app/kiosk/`, `frontend/src/components/tabs/TestTab.tsx`, `frontend/src/utils/print.ts`, `frontend/src/utils/ipv4.ts`
+- Delete: `frontend/src/app/print/`, `frontend/src/app/welcome/`, `frontend/src/app/kiosk/`, `frontend/src/components/tabs/TestTab.tsx`, `frontend/src/utils/print.ts`, `frontend/src/utils/ipv4.ts`, `frontend/src/types/print.ts`
+- Modify: `scripts/entrypoint.sh` (drop `PRINT_CONFIG` from the runtime-config key list)
 - Modify: `frontend/src/types/config.ts`, `frontend/src/utils/runtimeConfig.ts`, `frontend/src/proxy.ts`, `frontend/src/components/tabs/Tabs.tsx`, `frontend/src/components/tabs/CustomCreateTab.tsx`, `frontend/src/components/tabs/QuickCreateTab.tsx`, `frontend/src/components/tabs/VouchersTab.tsx`, `frontend/src/components/VoucherCard.tsx`, `frontend/src/contexts/GlobalContext.tsx`, `frontend/src/components/Header.tsx`, `frontend/src/components/utils/WifiQr.tsx`, `frontend/package.json`
 - Replace: `frontend/public/logo.svg` (already committed — the RUCKUS Networks lockup)
 
@@ -1661,7 +1757,7 @@ git commit -m "refactor: replace voucher types with guest pass types"
 ```bash
 cd /Users/todd/src/greyrock-labs/unleashed-voucher-manager
 git rm -r frontend/src/app/print frontend/src/app/welcome frontend/src/app/kiosk
-git rm frontend/src/components/tabs/TestTab.tsx frontend/src/utils/print.ts frontend/src/utils/ipv4.ts
+git rm frontend/src/components/tabs/TestTab.tsx frontend/src/utils/print.ts frontend/src/utils/ipv4.ts frontend/src/types/print.ts
 ```
 
 - [ ] **Step 2: Simplify the runtime config**
@@ -1683,6 +1779,12 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
 ```
 
 Then open `frontend/src/utils/runtimeConfig.ts` and delete the `PRINT_CONFIG` key and its JSON parsing, leaving the `WIFI_*` and `IS_LOGO_INVERTIBLE` reads untouched.
+
+Also edit `scripts/entrypoint.sh`, which writes `runtime-config.json` at container start. Remove `'PRINT_CONFIG'` from its `keys` array, leaving:
+
+```js
+const keys = ['WIFI_SSID','WIFI_PASSWORD','WIFI_TYPE','WIFI_HIDDEN','IS_LOGO_INVERTIBLE'];
+```
 
 - [ ] **Step 3: Simplify the proxy**
 
@@ -1804,7 +1906,7 @@ git commit -m "refactor: remove printing and rolling vouchers, rebrand to Ruckus
 - Modify: `frontend/src/proxy.ts` (add `/display` to the matcher only if gating is later needed — not required now)
 
 **Interfaces:**
-- Consumes: `api.getDailyPass()` (Task 7), the existing `WifiQr` component at `frontend/src/components/utils/WifiQr.tsx`, and `useServerEvents` at `frontend/src/hooks/useServerEvents.ts`.
+- Consumes: `api.getDailyPass()` (Task 7), the existing `WifiQr` component at `frontend/src/components/utils/WifiQr.tsx`, `Spinner` (default export) at `frontend/src/components/utils/Spinner.tsx`, and `useServerEvents` at `frontend/src/hooks/useServerEvents.ts` — which takes **no arguments** and signals via a `vouchersUpdated` window CustomEvent.
 - Produces: a read-only page at `/display`.
 
 - [ ] **Step 1: Write the page**
@@ -1843,7 +1945,13 @@ export default function DisplayPage() {
     return () => clearInterval(id);
   }, [refresh]);
 
-  useServerEvents(refresh);
+  // The hook takes no arguments -- it dispatches a `vouchersUpdated`
+  // CustomEvent on window, which is what we subscribe to.
+  useServerEvents();
+  useEffect(() => {
+    window.addEventListener("vouchersUpdated", refresh);
+    return () => window.removeEventListener("vouchersUpdated", refresh);
+  }, [refresh]);
 
   if (loading) {
     return (
@@ -1895,19 +2003,18 @@ git commit -m "feat: add guest-facing display page"
 **Files:**
 - Modify: `Dockerfile`
 - Create: `docker-bake.hcl`
-- Modify: `scripts/healthcheck.sh`
 - Modify: `compose.yaml`
-- Delete: `scripts/run_wrapper.sh` if it references removed env vars
 
 **Interfaces:**
 - Consumes: the built backend and frontend.
 - Produces: an image buildable with `docker buildx bake image-local`.
 
-- [ ] **Step 1: Update the healthcheck**
+- [ ] **Step 1: Write the bake file**
 
-The health endpoint moved from `/api/health` on the old port layout; confirm `scripts/healthcheck.sh` curls `http://127.0.0.1:${BACKEND_BIND_PORT:-8080}/api/health` and exits non-zero on failure. Adjust the path if it differs.
+`scripts/healthcheck.sh` already probes `/api/health` and `scripts/run_wrapper.sh`
+references no removed variables — both are correct as-is, leave them alone.
+(`scripts/entrypoint.sh` was handled in Task 8.)
 
-- [ ] **Step 2: Write the bake file**
 
 Create `docker-bake.hcl`, mirroring `cert-manager-webhook-cloudns`:
 
@@ -1949,7 +2056,7 @@ target "image-all" {
 }
 ```
 
-- [ ] **Step 3: Update compose.yaml**
+- [ ] **Step 2: Update compose.yaml**
 
 Replace the `environment:` block with the Unleashed variables:
 
@@ -1968,15 +2075,15 @@ Replace the `environment:` block with the Unleashed variables:
       WIFI_PASSWORD: ""
 ```
 
-- [ ] **Step 4: Build the image**
+- [ ] **Step 3: Build the image**
 
 Run: `docker buildx bake image-local`
 Expected: builds successfully and tags `unleashed-voucher-manager:local`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add Dockerfile docker-bake.hcl compose.yaml scripts
+git add Dockerfile docker-bake.hcl compose.yaml
 git commit -m "chore: add bake definition and update container config"
 ```
 
