@@ -2259,6 +2259,12 @@ git commit -m "ci: add Forgejo build and release workflows"
 apiVersion: v2
 name: unleashed-voucher-manager
 description: Guest WiFi pass manager for Ruckus Unleashed
+# sources[0] is what links the published chart package to its GitHub repo on
+# GHCR -- the chart-side counterpart of the image's manifest annotation. It
+# must be the GitHub URL, not the Forgejo one. Without it the chart package
+# is orphaned.
+sources:
+  - https://github.com/greyrock-labs/unleashed-voucher-manager
 type: application
 version: 0.0.0
 appVersion: "0.0.0"
