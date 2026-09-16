@@ -10,6 +10,7 @@ use tracing_subscriber::EnvFilter;
 use backend::{
     environment::{ENVIRONMENT, Environment},
     handlers::*,
+    tasks::run_daily_rotation,
     unleashed_api::{UNLEASHED_API, UnleashedApi},
 };
 
@@ -49,8 +50,7 @@ async fn main() {
         }
     }
 
-    // The daily rotation task is spawned in Task 6, which supplies it.
-    // Wiring the spawn here would leave the crate uncompilable until then.
+    tokio::spawn(run_daily_rotation());
 
     let cors = CorsLayer::new()
         .allow_headers([http::header::CONTENT_TYPE])
