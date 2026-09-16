@@ -82,20 +82,51 @@ pub async fn daily_pass_handler() -> Result<Json<GuestPass>, StatusCode> {
     }
 }
 
+/// Map a controller list-passes outcome to the health response. Factored out
+/// of the handler so the three reportable states -- reachable with today's
+/// pass current, reachable but stale/missing, and unreachable -- can be unit
+/// tested directly without standing up a mock controller.
+fn health_from_passes(passes: Option<&[GuestPass]>, expected_name: &str) -> HealthCheckResponse {
+    match passes {
+        Some(passes) => {
+            let daily_pass_current = resolve_daily_pass(passes, expected_name)
+                .map(|(_, current)| current)
+                .unwrap_or(false);
+            HealthCheckResponse {
+                status: "ok".to_string(),
+                daily_pass_current,
+                controller_reachable: true,
+            }
+        }
+        None => HealthCheckResponse {
+            status: "degraded".to_string(),
+            daily_pass_current: false,
+            controller_reachable: false,
+        },
+    }
+}
+
+// This handler deliberately always returns HTTP 200, even when the
+// Unleashed controller is completely unreachable. A restart cannot fix an
+// unreachable upstream, so failing liveness on it would turn a controller
+// outage into a crash-loop; failing readiness would pull this pod out of
+// service and take the diagnostic page down with it too, making the outage
+// total instead of degraded. So this endpoint keeps answering, and instead
+// reports `status: "degraded"` / `controllerReachable: false` in the body so
+// the truth is visible to anyone who reads the response rather than just the
+// status code. Do not "fix" this by returning a non-2xx on failure.
 pub async fn health_check_handler() -> Result<Json<HealthCheckResponse>, StatusCode> {
     debug!("Received health check request");
     let client = UNLEASHED_API.get().expect("UnleashedApi not initialized");
-    let daily_pass_current = match client.list_passes().await {
-        Ok(passes) => resolve_daily_pass(&passes, &expected_daily_name())
-            .map(|(_, current)| current)
-            .unwrap_or(false),
-        Err(_) => false,
+    let response = match client.list_passes().await {
+        Ok(passes) => health_from_passes(Some(&passes), &expected_daily_name()),
+        Err(e) => {
+            error!("Failed to list guest passes for health check: {}", e);
+            health_from_passes(None, &expected_daily_name())
+        }
     };
 
-    Ok(Json(HealthCheckResponse {
-        status: "ok".to_string(),
-        daily_pass_current,
-    }))
+    Ok(Json(response))
 }
 
 #[cfg(test)]
@@ -145,5 +176,33 @@ mod tests {
     fn ignores_passes_that_are_not_daily() {
         let passes = vec![pass("work-laptop", 999)];
         assert!(resolve_daily_pass(&passes, "daily-2026-09-16").is_none());
+    }
+
+    #[test]
+    fn health_reports_ok_when_todays_pass_is_current() {
+        let passes = vec![pass("daily-2026-09-16", 200)];
+        let health = health_from_passes(Some(&passes), "daily-2026-09-16");
+        assert_eq!(health.status, "ok");
+        assert!(health.daily_pass_current);
+        assert!(health.controller_reachable);
+    }
+
+    #[test]
+    fn health_reports_ok_but_stale_when_todays_pass_is_missing() {
+        let passes = vec![pass("daily-2026-09-15", 100)];
+        let health = health_from_passes(Some(&passes), "daily-2026-09-16");
+        assert_eq!(health.status, "ok");
+        assert!(!health.daily_pass_current);
+        assert!(health.controller_reachable);
+    }
+
+    /// The controller outage case: still 200'd by the handler, but the body
+    /// must say so -- this is the whole point of the fix.
+    #[test]
+    fn health_reports_degraded_when_controller_is_unreachable() {
+        let health = health_from_passes(None, "daily-2026-09-16");
+        assert_eq!(health.status, "degraded");
+        assert!(!health.daily_pass_current);
+        assert!(!health.controller_reachable);
     }
 }

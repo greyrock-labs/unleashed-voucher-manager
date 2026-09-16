@@ -68,10 +68,15 @@ pub struct CreatePassRequest {
 
 #[derive(Debug, Serialize)]
 pub struct HealthCheckResponse {
+    /// "ok" when the controller answered, "degraded" when it did not.
+    /// Deliberately still served with HTTP 200 -- see the handler.
     pub status: String,
     /// False when today's pass is missing and only a stale one was found.
     #[serde(rename = "dailyPassCurrent")]
     pub daily_pass_current: bool,
+    /// False when the Unleashed controller could not be reached at all.
+    #[serde(rename = "controllerReachable")]
+    pub controller_reachable: bool,
 }
 
 fn attr_map(e: &quick_xml::events::BytesStart) -> Result<Vec<(String, String)>, UnleashedError> {
