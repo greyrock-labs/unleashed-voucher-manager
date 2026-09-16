@@ -10,7 +10,7 @@ chrono-tz = "0.10.4"
 dotenvy = { version = "0.15.7", optional = true }
 percent-encoding = "2.3.2"
 quick-xml = "0.38"
-reqwest = { version = "0.13.4", features = ["json", "query"] }
+reqwest = { version = "0.13.4", features = ["json", "query", "cookies", "form"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 thiserror = "2.0"
@@ -19,6 +19,10 @@ tower = "0.5.3"
 tower-http = { version = "0.7.0", features = ["cors"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[dev-dependencies]
+wiremock = "0.6"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [profile.release]
 opt-level = "z"
