@@ -14,7 +14,7 @@ export default function WifiQrModal({ onClose }: Props) {
         <h2 className="text-2xl font-bold text-primary text-center">
           Wi-Fi QR Code
         </h2>
-        <WifiQr className="w-full h-72" sizeRatio={0.88} />
+        <WifiQr className="w-full h-72" sizeRatio={0.88} imageSrc="/logo-mark.png" />
 
         <p className="text-sm text-muted text-center">
           Scan this QR code to join the network

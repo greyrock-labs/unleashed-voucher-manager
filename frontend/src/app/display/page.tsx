@@ -78,7 +78,7 @@ export default function DisplayPage() {
               and re-fired the ResizeObserver, converging down to the caption
               width or the 32px floor. Sized here for a wall-mounted tablet
               or TV. */}
-          <WifiQr className="h-64 w-64 sm:h-96 sm:w-96" />
+          <WifiQr className="h-64 w-64 sm:h-96 sm:w-96" imageSrc="/logo-mark.png" />
         </>
       ) : (
         <p className="max-w-md text-xl text-muted sm:text-2xl">
