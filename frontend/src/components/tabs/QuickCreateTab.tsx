@@ -2,7 +2,7 @@
 
 import SuccessModal from "@/components/modals/SuccessModal";
 import { GuestPass } from "@/types/voucher";
-import { api } from "@/utils/api";
+import { api, createPassErrorMessage, uniqueNameSuffix } from "@/utils/api";
 import { notify } from "@/utils/notifications";
 import { useCallback, useState } from "react";
 
@@ -24,13 +24,17 @@ export default function QuickCreateTab() {
     setLoading(durationHours);
     try {
       const pass = await api.createPass({
-        name: `Quick Pass (${formatPresetLabel(durationHours)})`,
+        // The suffix is not decoration: without it every preset name is
+        // fixed, the controller rejects the second click as a duplicate,
+        // and the button is permanently one-shot -- passes cannot be
+        // deleted to free the name up again.
+        name: `Quick Pass (${formatPresetLabel(durationHours)}) ${uniqueNameSuffix()}`,
         durationHours,
         shareNumber: 0,
       });
       setNewPass(pass);
-    } catch {
-      notify("Failed to create guest pass", "error");
+    } catch (error) {
+      notify(createPassErrorMessage(error), "error");
     }
     setLoading(null);
   };

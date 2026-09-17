@@ -4,17 +4,35 @@ import SuccessModal from "@/components/modals/SuccessModal";
 import { GuestPass, PassCreateData } from "@/types/voucher";
 import {
   api,
+  createPassErrorMessage,
   MAX_PASS_DURATION_HOURS,
   MAX_PASS_SHARES,
   MIN_PASS_DURATION_HOURS,
   MIN_PASS_SHARES,
+  uniqueNameSuffix,
 } from "@/utils/api";
 import { notify } from "@/utils/notifications";
-import { useCallback, useState, SubmitEvent } from "react";
+import { useCallback, useMemo, useState, SubmitEvent } from "react";
+
+/**
+ * The default name has to differ every time. Passes cannot be deleted, and
+ * the controller rejects a duplicate name, so a fixed default made the form
+ * usable exactly once unless the user thought to retype the name.
+ */
+function defaultPassName(): string {
+  return `Custom Guest Pass ${uniqueNameSuffix()}`;
+}
 
 export default function CustomCreateTab() {
   const [loading, setLoading] = useState(false);
   const [newPass, setNewPass] = useState<GuestPass | null>(null);
+  // Bumped after a successful create to remount the form, which clears the
+  // fields and re-seeds the name with a fresh unique default. `form.reset()`
+  // would restore the *old* default name instead.
+  const [formKey, setFormKey] = useState(0);
+  // Pinned to formKey so unrelated re-renders (the loading flag, the success
+  // modal) cannot swap the name out from under a pristine field mid-submit.
+  const defaultName = useMemo(() => defaultPassName(), [formKey]);
 
   const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
@@ -33,9 +51,9 @@ export default function CustomCreateTab() {
       const pass = await api.createPass(payload);
       setNewPass(pass);
       notify("Successfully created guest pass", "success");
-      form.reset();
-    } catch {
-      notify("Failed to create guest pass", "error");
+      setFormKey((key) => key + 1);
+    } catch (error) {
+      notify(createPassErrorMessage(error), "error");
     }
     setLoading(false);
   };
@@ -46,14 +64,18 @@ export default function CustomCreateTab() {
 
   return (
     <div>
-      <form onSubmit={handleSubmit} className="card max-w-lg mx-auto space-y-6">
+      <form
+        key={formKey}
+        onSubmit={handleSubmit}
+        className="card max-w-lg mx-auto space-y-6"
+      >
         <div>
           <label className="block font-medium mb-1">Name</label>
           <input
             name="name"
             type="text"
             required
-            defaultValue="Custom Guest Pass"
+            defaultValue={defaultName}
           />
         </div>
 

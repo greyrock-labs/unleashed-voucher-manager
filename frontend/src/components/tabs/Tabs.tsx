@@ -8,7 +8,7 @@ import { useState } from "react";
 const TAB_CONFIG = [
   {
     id: "vouchers",
-    label: "View Vouchers",
+    label: "View Passes",
     component: VouchersTab,
     enabled: true,
   },

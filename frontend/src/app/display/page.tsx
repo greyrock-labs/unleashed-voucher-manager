@@ -72,7 +72,13 @@ export default function DisplayPage() {
             {formatCode(pass.code)}
           </p>
 
-          <WifiQr />
+          {/* An explicit box is required. WifiQr measures its container and
+              sizes the QR to a fraction of it; as a content-sized flex item
+              it has no intrinsic size, so each measurement shrank the box
+              and re-fired the ResizeObserver, converging down to the caption
+              width or the 32px floor. Sized here for a wall-mounted tablet
+              or TV. */}
+          <WifiQr className="h-64 w-64 sm:h-96 sm:w-96" />
 
           <div className="text-base text-muted sm:text-lg">
             <p>Devices allowed: {formatDevices(pass.shareNumber)}</p>
