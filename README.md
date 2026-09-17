@@ -30,10 +30,17 @@ The controller's own guest-management UI has no delete button for this role
 either. This is not a missing feature; there is no code path that could add
 it without a second, full-admin credential.
 
-**Consequence:** old daily passes accumulate in the guest list forever. You
-must periodically delete expired/unwanted passes yourself in the Unleashed
-admin UI (`Users -> Guest Access -> Guest Pass List`, or similar, depending
-on firmware). This app cannot do it for you.
+**Consequence:** this app can never remove a pass, so anything you want gone
+before it expires has to go from the Unleashed admin UI yourself
+(`Users -> Guest Access -> Guest Pass List`, or similar, depending on
+firmware).
+
+It is a smaller problem than it sounds. Expired passes clean themselves up
+-- confirmed on a live controller, with the guest WLAN on creation-time
+validity (see [Controller setup](#controller-setup)), where every daily
+pass reliably reaches its expiry. They do not pile up forever and you do
+not have to sweep them. Manual deletion is only for a pass you want gone
+early, such as a code that leaked before its day was out.
 
 ### 2. Pass lifetime hangs on a WLAN setting you must set yourself
 
@@ -403,9 +410,9 @@ happen) rather than wiring it to a Kubernetes probe.
 
 ## Troubleshooting
 
-- **Old passes piling up in the controller's guest list.** Expected — see
-  constraint #1. Prune them from the Unleashed admin UI directly; this app
-  cannot delete.
+- **A pass you want gone before it expires.** This app cannot delete --
+  see constraint #1. Remove it from the Unleashed admin UI directly.
+  Expired passes need no action; they clear on their own.
 - **Yesterday's code still works after today's was minted.** The guest WLAN
   is on first-use validity. Switch it to "Effective from the creation time"
   on that SSID — see [Controller setup](#controller-setup). The change is

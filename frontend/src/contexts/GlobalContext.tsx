@@ -83,6 +83,16 @@ export const GlobalProvider = ({ children }: GlobalProviderProps) => {
 
       const isDark = theme === "dark" || (theme === "system" && mql.matches);
       html.classList.toggle("dark", isDark);
+
+      // Not redundant with the class. Two things read this instead:
+      // native controls (the theme <select>, scrollbars), and SVGs loaded
+      // through <img>, which are separate documents that cannot see our
+      // .dark class. logo.svg carries its own prefers-color-scheme rule to
+      // lighten the wordmark, and without color-scheme set here that rule
+      // follows the OS -- so picking Dark in the app while the OS was Light
+      // left a near-black logo on a near-black header.
+      html.style.colorScheme = isDark ? "dark" : "light";
+
       localStorage.setItem("theme", theme);
 
       if (isSafari) {
