@@ -116,9 +116,15 @@ An unused 1-hour pass will show an `expiresAt` a week away. That's correct
 
 ### Durations are always whole hours
 
-The Unleashed controller silently treats `duration-unit='day'` as hours (a
-"1 day" request produces a 1-hour pass). To avoid that trap, this app only
-ever sends `duration-unit='hour'` and expresses every duration — including
+On the `create-guest` API the `duration` value is interpreted in hours, and
+`duration-unit` does not scale it: sending `duration='1' duration-unit='day'`
+yields a **1-hour** pass, not a 1-day one. The Unleashed admin UI gets this
+right because it converts to hours before sending (its own bundle calls
+`changeDurationToHours` on the way out), so picking "1 day" there transmits
+`duration=24`.
+
+This app takes the same approach for the same reason: it only ever sends
+`duration-unit='hour'` and expresses every duration — including
 `DAILY_DURATION_HOURS` and the Custom Create form — in whole hours.
 
 ## Quick start (Docker Compose)
