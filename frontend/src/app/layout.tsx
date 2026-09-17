@@ -5,8 +5,8 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Unleashed Voucher Manager",
   description: "Manage Ruckus Unleashed guest passes with ease",
-  authors: [{ name: "etiennecollin", url: "https://etiennecollin.com" }],
-  creator: "Etienne Collin",
+  authors: [{ name: "Greyrock Labs", url: "https://github.com/greyrock-labs" }],
+  creator: "Greyrock Labs",
   robots: {
     index: false,
   },

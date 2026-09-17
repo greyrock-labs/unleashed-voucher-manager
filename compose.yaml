@@ -1,9 +1,7 @@
 ---
 services:
-  unifi-voucher-manager:
-    image: "docker.io/etiennecollin/unifi-voucher-manager:latest"
-    # Or use the github registry
-    # image: "ghcr.io/etiennecollin/unifi-voucher-manager:latest"
+  unleashed-voucher-manager:
+    image: "ghcr.io/greyrock-labs/unleashed-voucher-manager:latest"
 
     # To build the image yourself
     # build:
@@ -11,7 +9,7 @@ services:
     #   target: "runtime"
     #   dockerfile: "./Dockerfile"
 
-    container_name: "unifi-voucher-manager"
+    container_name: "unleashed-voucher-manager"
     restart: "unless-stopped"
     ports:
       - "3000:3000"
