@@ -16,6 +16,16 @@ jobs:
       - name: Checkout
         uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Set up Rust
+        # The runner image ships Node (the frontend job works without setup)
+        # but not Rust, so install it here. No rust-toolchain.toml: the
+        # Dockerfile builds on rust:1.97-alpine and a pin here would make that
+        # image fetch a second toolchain.
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
       - name: Build
         run: cd backend && cargo build --locked
 

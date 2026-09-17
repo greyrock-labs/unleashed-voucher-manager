@@ -19,6 +19,16 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Set up Rust
+        # The runner image ships Node (the frontend job works without setup)
+        # but not Rust, so install it here. No rust-toolchain.toml: the
+        # Dockerfile builds on rust:1.97-alpine and a pin here would make that
+        # image fetch a second toolchain.
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
       - name: Run backend tests
         run: cd backend && cargo test --locked
 
