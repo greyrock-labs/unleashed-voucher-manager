@@ -19,22 +19,22 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Check Chart.yaml matches the tag
-        # Without this the chart version drifts: helm package overrides it
-        # from the tag anyway, so a stale value in the file is invisible at
-        # release time and only misleads whoever reads it later.
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
+      - name: Check Chart.yaml is still the placeholder
+        # The tag is the only version input. A real version here would be
+        # wrong between releases either way, and because deployment.yaml
+        # falls back to .Chart.AppVersion for the image tag, a plausible one
+        # makes a checkout render a pullable superseded image instead of
+        # failing. See the comment in Chart.yaml.
         run: |
           set -eu
           chart="deploy/unleashed-voucher-manager/Chart.yaml"
           version="$(awk -F': *' '/^version:/{print $2; exit}' "$chart" | tr -d '"')"
           app_version="$(awk -F': *' '/^appVersion:/{print $2; exit}' "$chart" | tr -d '"')"
           fail=0
-          [ "$version" = "$VERSION" ] || { echo "Chart.yaml version is $version, tag is $VERSION" >&2; fail=1; }
-          [ "$app_version" = "$VERSION" ] || { echo "Chart.yaml appVersion is $app_version, tag is $VERSION" >&2; fail=1; }
-          [ "$fail" -eq 0 ] || { echo "Bump Chart.yaml to $VERSION and re-tag." >&2; exit 1; }
-          echo "Chart.yaml and tag agree on $VERSION"
+          [ "$version" = "0.0.0" ] || { echo "Chart.yaml version is $version, expected the 0.0.0 placeholder" >&2; fail=1; }
+          [ "$app_version" = "0.0.0" ] || { echo "Chart.yaml appVersion is $app_version, expected the 0.0.0 placeholder" >&2; fail=1; }
+          [ "$fail" -eq 0 ] || { echo "Do not hand-edit the version to cut a release -- tag instead." >&2; exit 1; }
+          echo "Chart.yaml placeholder intact; version comes from the tag"
 
       - name: Set up Rust
         # The runner image ships Node (the frontend job works without setup)
