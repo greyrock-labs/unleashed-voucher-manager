@@ -165,22 +165,28 @@ does: every `create-guest` carries an explicit `duration`.
 
 > **"Unique password for each guest"**
 
-The whole app is built on minting a distinct code per pass. "Single shared
-password among all guest" hands every guest the same static password
-instead, leaving nothing for the daily rotation to rotate.
+Guest pass codes do not work without it. The alternative, "Single shared
+password among all guest", hands every guest the same static password
+instead — there is no per-pass code for this app to mint, display, or
+rotate.
 
 ### Required: Guest Authentication
 
-Must be a mode that issues guest passes — "Guest Pass and Social Login" is
-the configuration this was verified against. A mode without guest passes
-gives `create-guest` nothing to create.
+> **"Guest Pass and Social Login"**
 
-### Not required: Guest Friendly Key
+The only choice that includes guest passes; the controller offers no
+guest-pass-only mode. Picking anything else leaves `create-guest` with
+nothing to create.
 
-On in the verified configuration, where it yields ten-character codes. The
-admin UI and `/display` hyphenate those 5-5 for legibility; any other
-length renders unsplit, so turning this off costs readability and nothing
-else.
+### Optional: Guest Friendly Key
+
+Worth turning on. It makes the controller mint short, mostly numeric codes
+rather than a long random string, which matters when the code's whole job
+is to be read off a wall and typed into a phone by someone standing in your
+kitchen.
+
+Nothing breaks either way: `formatCode` hyphenates ten-character codes 5-5
+for legibility and passes any other length through untouched.
 
 ### Unrelated: Grace Period
 
