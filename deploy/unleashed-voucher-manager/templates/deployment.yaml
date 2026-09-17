@@ -23,7 +23,7 @@ spec:
           ports:
             - name: http
               containerPort: 3000
-          {{- if and .Values.wifiOpenNetwork .Values.config.WIFI_PASSWORD }}
+          {{- if and .Values.wifiOpenNetwork (.Values.config).WIFI_PASSWORD }}
           {{- fail "wifiOpenNetwork is true but config.WIFI_PASSWORD is also set -- an open network has no password, so set only one of them" }}
           {{- end }}
           {{- /*
