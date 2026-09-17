@@ -19,6 +19,23 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Check Chart.yaml matches the tag
+        # Without this the chart version drifts: helm package overrides it
+        # from the tag anyway, so a stale value in the file is invisible at
+        # release time and only misleads whoever reads it later.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -eu
+          chart="deploy/unleashed-voucher-manager/Chart.yaml"
+          version="$(awk -F': *' '/^version:/{print $2; exit}' "$chart" | tr -d '"')"
+          app_version="$(awk -F': *' '/^appVersion:/{print $2; exit}' "$chart" | tr -d '"')"
+          fail=0
+          [ "$version" = "$VERSION" ] || { echo "Chart.yaml version is $version, tag is $VERSION" >&2; fail=1; }
+          [ "$app_version" = "$VERSION" ] || { echo "Chart.yaml appVersion is $app_version, tag is $VERSION" >&2; fail=1; }
+          [ "$fail" -eq 0 ] || { echo "Bump Chart.yaml to $VERSION and re-tag." >&2; exit 1; }
+          echo "Chart.yaml and tag agree on $VERSION"
+
       - name: Set up Rust
         # The runner image ships Node (the frontend job works without setup)
         # but not Rust, so install it here. No rust-toolchain.toml: the

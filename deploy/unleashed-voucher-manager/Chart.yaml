@@ -8,13 +8,12 @@ description: Guest WiFi pass manager for Ruckus Unleashed
 sources:
   - https://github.com/greyrock-labs/unleashed-voucher-manager
 type: application
-# Placeholders. The release workflow packages the chart with
-# --version/--app-version taken from the git tag, so a published chart
-# always carries the same version as the image it deploys, and these two
-# values are never what ships. Bumping them here would have no effect;
-# cutting a vX.Y.Z tag is what bumps the chart.
+# Kept equal to the release tag, and the release workflow refuses to publish
+# if they disagree. helm package still passes --version/--app-version from
+# the tag, so the tag remains what decides the published version -- this is
+# here so the file is true when read, and so a local helm template or lint
+# renders the version that would actually ship.
 #
-# Consequence: helm template/install straight from a checkout renders
-# 0.0.0. Pull from oci://ghcr.io/greyrock-labs/helm to exercise a real one.
-version: 0.0.0
-appVersion: "0.0.0"
+# Bump this in the change being released, before tagging.
+version: 0.3.1
+appVersion: "0.3.1"
