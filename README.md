@@ -35,12 +35,13 @@ must periodically delete expired/unwanted passes yourself in the Unleashed
 admin UI (`Users -> Guest Access -> Guest Pass List`, or similar, depending
 on firmware). This app cannot do it for you.
 
-### 2. Pass lifetime hangs on a controller setting you must set yourself
+### 2. Pass lifetime hangs on a WLAN setting you must set yourself
 
-The controller decides when a pass's validity clock starts, and it decides
-it globally — there is no per-pass field this app could send. **Set it to
-"Effective from the creation time"**; see
-[Controller setup](#controller-setup) below. Everything here assumes it.
+The guest WLAN decides when a pass's validity clock starts — it is a
+property of the network, not a field this app could send per pass. **Set
+it to "Effective from the creation time"** on the SSID you point
+`UNLEASHED_SSID` at; see [Controller setup](#controller-setup) below.
+Everything here assumes it.
 
 Left on the other option, "Effective from first use", a pass's duration
 only begins counting when a guest first connects, and until then the code
@@ -125,18 +126,20 @@ This app takes the same approach for the same reason: it only ever sends
 
 ## Controller setup
 
-One setting on the Unleashed controller itself has to be right before any
-of this behaves as documented, and this app cannot set it — the controller
-exposes it globally, not per pass.
+Some of what this app does depends on how the **guest WLAN itself** is
+configured, not on anything the app can send. These settings live on the
+Wi-Fi network, so they must be set on the SSID you name in
+`UNLEASHED_SSID`, and they apply to no other network.
 
-In the controller admin UI, open the guest access configuration (the exact
-path moves between firmware versions; look for the guest pass / self-service
-settings under Guest Access) and set:
+Reach them at **Wi-Fi -> Wi-Fi Networks -> Wi-Fi Networks List**, pick the
+guest network, then **Edit Wi-Fi Network -> Guest Details**.
 
-> **Effective Date of Validity Period → "Effective from the creation time"**
+### Required: Effective Date of Validity Period
 
-That starts a pass's clock the moment it is minted, which is what the daily
-rotation assumes:
+> **"Effective from the creation time"**
+
+This is the one that matters most. It starts a pass's clock the moment the
+pass is minted, which is what the daily rotation assumes:
 
 - the daily code is good for exactly `DAILY_DURATION_HOURS` from the roll;
 - yesterday's code stops working on schedule instead of lingering;
@@ -148,23 +151,53 @@ above describes. The app still runs against it, but the daily rotation
 stops being a rotation: every past code stays claimable for the full unused
 window.
 
-### The tradeoff this buys
+**Changing this is retroactive**, verified on a live controller: passes
+minted before the switch are re-evaluated under the new setting rather than
+keeping the semantics they were created under. Flipping it does not leave
+you with a tail of old codes behaving the old way.
 
-A pass now expires `DAILY_DURATION_HOURS` after it is created, whatever
-time a guest turns up. With the defaults — roll at 4am, 24-hour duration —
-someone connecting at 3am gets an hour of access, not a day.
+The radio governs *when* the clock starts, never *how long* it runs. The
+controller's own help text on this field says so — "Validity duration can
+be configured when creating guest pass" — and that is exactly what this app
+does: every `create-guest` carries an explicit `duration`.
+
+### Required: Guest Password
+
+> **"Unique password for each guest"**
+
+The whole app is built on minting a distinct code per pass. "Single shared
+password among all guest" hands every guest the same static password
+instead, leaving nothing for the daily rotation to rotate.
+
+### Required: Guest Authentication
+
+Must be a mode that issues guest passes — "Guest Pass and Social Login" is
+the configuration this was verified against. A mode without guest passes
+gives `create-guest` nothing to create.
+
+### Not required: Guest Friendly Key
+
+On in the verified configuration, where it yields ten-character codes. The
+admin UI and `/display` hyphenate those 5-5 for legibility; any other
+length renders unsplit, so turning this off costs readability and nothing
+else.
+
+### Unrelated: Grace Period
+
+The `480 minutes` field on the same screen is the Grace Period, which
+governs reconnection, not pass validity. Nothing here reads or depends on
+it.
+
+### The tradeoff creation-time validity buys
+
+A pass expires `DAILY_DURATION_HOURS` after it is created, whatever time a
+guest turns up. With the defaults — roll at 4am, 24-hour duration — someone
+connecting at 3am gets an hour of access, not a day.
 
 If that matters, set `DAILY_DURATION_HOURS` above `24` so consecutive days
 overlap. At `30`, each code outlives the next roll by six hours: nobody
 ever gets less than six hours, at the cost of yesterday's code staying live
 until 10am.
-
-### Leave the global validity duration alone
-
-The same screen carries a default validity duration (`480 minutes` out of
-the box). It does not need changing. This app sends an explicit `duration`
-on every create, which overrides it — as the controller's own tooltip says,
-"Validity duration can be configured when creating guest pass".
 
 ## Quick start (Docker Compose)
 
@@ -367,9 +400,10 @@ happen) rather than wiring it to a Kubernetes probe.
 - **Old passes piling up in the controller's guest list.** Expected — see
   constraint #1. Prune them from the Unleashed admin UI directly; this app
   cannot delete.
-- **Yesterday's code still works after today's was minted.** The controller
+- **Yesterday's code still works after today's was minted.** The guest WLAN
   is on first-use validity. Switch it to "Effective from the creation time"
-  — see [Controller setup](#controller-setup).
+  on that SSID — see [Controller setup](#controller-setup). The change is
+  retroactive, so existing codes fall in line too.
 - **One guest connects and then nobody else can use the code.** Check
   `DAILY_SHARE_NUMBER` — it's probably set to `1`. Use `0` for unlimited.
 - **WiFi QR code isn't showing on `/display`.** Confirm both `WIFI_SSID`
