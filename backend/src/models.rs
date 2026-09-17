@@ -84,9 +84,14 @@ fn attr_map(e: &quick_xml::events::BytesStart) -> Result<Vec<(String, String)>, 
     let mut out = Vec::new();
     for a in e.attributes() {
         let a = a.map_err(|err| UnleashedError::Parse(err.to_string()))?;
-        let key = String::from_utf8_lossy(a.key.as_ref()).to_string();
+        let key = a.key.as_ref().to_string();
         let val = a
-            .unescape_value()
+            // quick-xml 0.42 replaced unescape_value with normalized_value,
+            // which takes the XML version because 1.1 normalizes characters
+            // 1.0 does not. Implicit1_0 is what the old method passed, so
+            // this keeps behaviour identical; the controller's responses
+            // carry no XML declaration, which is what "implicit" means.
+            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
             .map_err(|err| UnleashedError::Parse(err.to_string()))?
             .to_string();
         out.push((key, val));
@@ -165,7 +170,7 @@ pub fn parse_guest_list(xml: &str) -> Result<Vec<GuestPass>, UnleashedError> {
                     Event::Empty(e) => e.clone(),
                     _ => unreachable!(),
                 };
-                let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                let name = e.name().as_ref().to_string();
                 let attrs = attr_map(&e)?;
                 match name.as_str() {
                     "guest" => {
@@ -187,7 +192,7 @@ pub fn parse_guest_list(xml: &str) -> Result<Vec<GuestPass>, UnleashedError> {
                 }
             }
             Event::End(e) => {
-                if e.name().as_ref() == b"guest" {
+                if e.name().as_ref() == "guest" {
                     depth_in_guest = false;
                 }
             }
@@ -213,7 +218,7 @@ pub fn parse_generated_key(xml: &str) -> Result<String, UnleashedError> {
             .map_err(|e| UnleashedError::Parse(e.to_string()))?
         {
             Event::Start(e) | Event::Empty(e) => {
-                if e.name().as_ref() == b"xmsg" {
+                if e.name().as_ref() == "xmsg" {
                     let attrs = attr_map(&e)?;
                     if let Some(key) = get(&attrs, "x-key")
                         && !key.is_empty()
@@ -239,7 +244,7 @@ pub fn controller_error(xml: &str) -> Option<String> {
     loop {
         match reader.read_event() {
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
-                if e.name().as_ref() == b"xmsg"
+                if e.name().as_ref() == "xmsg"
                     && let Ok(attrs) = attr_map(&e)
                     && get(&attrs, "type") == Some("-1")
                 {
