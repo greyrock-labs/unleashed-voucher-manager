@@ -10,10 +10,6 @@ function withDefaults(config: Partial<RuntimeConfig>): RuntimeConfig {
   return {
     ...DEFAULT_RUNTIME_CONFIG,
     ...config,
-    PRINT_CONFIG: {
-      ...DEFAULT_RUNTIME_CONFIG.PRINT_CONFIG,
-      ...config.PRINT_CONFIG,
-    },
   };
 }
 

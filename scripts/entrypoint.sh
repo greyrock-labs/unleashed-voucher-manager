@@ -9,7 +9,7 @@ mkdir -p /app/frontend/public
 node - <<'NODE'
 const fs = require('fs');
 const outPath = '/app/frontend/public/runtime-config.json';
-const keys = ['WIFI_SSID','WIFI_PASSWORD','WIFI_TYPE','WIFI_HIDDEN','PRINT_CONFIG',"IS_LOGO_INVERTIBLE"];
+const keys = ['WIFI_SSID','WIFI_PASSWORD','WIFI_TYPE','WIFI_HIDDEN','IS_LOGO_INVERTIBLE'];
 
 function parseValue(value) {
   if (!value) {

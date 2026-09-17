@@ -1,86 +1,57 @@
-import { Voucher } from "@/types/voucher";
-import {
-  formatCode,
-  formatDuration,
-  formatGuestUsage,
-  formatStatus,
-} from "@/utils/format";
+import { GuestPass } from "@/types/voucher";
+import { formatCode, formatDateTime, formatDevices } from "@/utils/format";
 import { memo, useCallback } from "react";
 
 type Props = {
-  voucher: Voucher;
-  selected: boolean;
-  editMode: boolean;
-  onClick?: (v: Voucher) => void;
+  pass: GuestPass;
+  onClick?: (p: GuestPass) => void;
 };
 
-const VoucherCard = ({ voucher, selected, editMode, onClick }: Props) => {
-  const statusClass = voucher.expired
-    ? "bg-status-danger text-status-danger"
-    : voucher.activatedAt
-      ? "bg-status-warning text-status-warning"
-      : "bg-status-success text-status-success";
-  const onClickHandler = useCallback(
-    () => onClick?.(voucher),
-    [voucher, onClick],
-  );
+const VoucherCard = ({ pass, onClick }: Props) => {
+  const statusClass = pass.used
+    ? "bg-status-warning text-status-warning"
+    : "bg-status-success text-status-success";
+  const onClickHandler = useCallback(() => onClick?.(pass), [pass, onClick]);
 
   return (
-    <div
-      onClick={onClickHandler}
-      className={`card card-interactive
-        ${selected ? "border-accent" : ""}
-        ${editMode ? "relative" : ""}`}
-    >
-      {editMode && (
-        <div className="absolute top-3 right-3 z-1000">
-          <div
-            className={`w-6 h-6 rounded-full border-2 flex-center
-            ${selected ? "selected-accent" : "unselected-neutral"}`}
-          >
-            {selected && <div className="w-3 h-3 bg-white rounded-full" />}
-          </div>
-        </div>
-      )}
-
+    <div onClick={onClickHandler} className="card card-interactive">
       {/* Primary Information */}
       <div className="mb-2">
-        <div className="text-xl voucher-code">{formatCode(voucher.code)}</div>
-        <div className="text-lg font-semibold truncate">{voucher.name}</div>
+        <div className="text-xl voucher-code">{formatCode(pass.code)}</div>
+        <div className="text-lg font-semibold truncate">{pass.name}</div>
       </div>
 
       <div className="space-y-1 text-sm text-secondary">
         <div className="flex justify-between">
-          <span>Guests Used:</span>
-          <span>
-            {formatGuestUsage(
-              voucher.authorizedGuestCount,
-              voucher.authorizedGuestLimit,
-            )}
-          </span>
+          <span>SSID:</span>
+          <span>{pass.ssid}</span>
         </div>
 
         <div className="flex justify-between">
-          <span>Session Time:</span>
-          <span>{formatDuration(voucher.timeLimitMinutes)}</span>
+          <span>Devices:</span>
+          <span>{formatDevices(pass.shareNumber)}</span>
         </div>
 
-        {voucher.activatedAt && (
-          <div className="flex justify-between">
-            <span>First Used:</span>
-            <span className="text-xs">{voucher.activatedAt}</span>
-          </div>
-        )}
+        <div className="flex justify-between">
+          <span>Created:</span>
+          <span className="text-xs">{formatDateTime(pass.createdAt)}</span>
+        </div>
+
+        <div className="flex justify-between">
+          <span>Connected Devices:</span>
+          <span>{pass.clientMacs.length}</span>
+        </div>
 
         <div className="flex-center-between">
           <span
             className={`px-2 py-1 rounded-lg text-xs font-semibold uppercase ${statusClass}`}
           >
-            {formatStatus(voucher.expired, voucher.activatedAt)}
+            {pass.used ? "Used" : "Available"}
           </span>
-          {voucher.expiresAt && (
-            <span className="text-xs">Expires: {voucher.expiresAt}</span>
-          )}
+          <span className="text-xs">
+            {pass.used ? "Expires" : "Must be claimed by"}:{" "}
+            {formatDateTime(pass.expiresAt)}
+          </span>
         </div>
       </div>
     </div>

@@ -5,12 +5,10 @@ import ThemeSwitcher from "@/components/utils/ThemeSwitcher";
 import WifiQrModal from "@/components/modals/WifiQrModal";
 import { useGlobal } from "@/contexts/GlobalContext";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 
 export default function Header() {
   const [showWifi, setShowWifi] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
-  const router = useRouter();
   const { runtimeConfig, wifiConfig, wifiString } = useGlobal();
   const isLogoInvertible = runtimeConfig.IS_LOGO_INVERTIBLE;
   const qrAvailable: boolean = useMemo(
@@ -43,26 +41,18 @@ export default function Header() {
         <div className="flex-center gap-3">
           <Image
             src="/logo.svg"
-            width={35}
-            height={35}
+            width={110}
+            height={54}
             loading="eager"
-            alt="UniFi Voucher Manager logo"
+            alt="Unleashed Voucher Manager logo"
             className={"shrink-0" + (isLogoInvertible ? " dark:invert" : "")}
           />
           <h1 className="text-xl md:text-2xl font-semibold text-brand">
             <span className="block sm:hidden">UVM</span>
-            <span className="hidden sm:block">UniFi Voucher Manager</span>
+            <span className="hidden sm:block">Unleashed Voucher Manager</span>
           </h1>
         </div>
         <div className="flex-center gap-3">
-          <button
-            onClick={() => router.push("/kiosk")}
-            className="btn text-xl p-1 px-2 shrink-0"
-            aria-label="Open Kiosk"
-            title="Open Kiosk"
-          >
-            📺
-          </button>
           <button
             onClick={() => setShowWifi(true)}
             className="btn p-1 shrink-0"
