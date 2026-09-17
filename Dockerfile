@@ -73,7 +73,7 @@ RUN \
 # ==============================================================================
 # Runner
 # ==============================================================================
-FROM alpine:3.22 AS runtime
+FROM alpine:3.24 AS runtime
 RUN apk add --no-cache ca-certificates wget nodejs
 
 WORKDIR /app
