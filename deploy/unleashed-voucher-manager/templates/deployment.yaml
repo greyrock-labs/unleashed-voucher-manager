@@ -49,7 +49,42 @@ spec:
         - name: seed-public
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["sh", "-c", "cp -a /app/frontend/public/. /work/"]
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              src=/app/frontend/public
+
+              # -r, not -a. With a `.` source, -a applies the SOURCE
+              # directory's ownership, mode and timestamps to /work itself --
+              # and /work is the kubelet's emptyDir, owned by root. A non-root
+              # container cannot chown/chmod/utimes it, so -a printed three
+              # EPERM warnings on every start from a copy that had in fact
+              # worked. None of those attributes are worth preserving when a
+              # single uid owns everything at runtime.
+              #
+              # Not `cp -a "$src"/*`: that silences the warnings by silently
+              # skipping dotfiles, trading a visible complaint for an
+              # invisible gap the first time the frontend ships one.
+              cp -r "$src/." /work/
+
+              # busybox cp exited 0 while printing those warnings, so exit
+              # status alone cannot show the seed worked -- a genuinely failed
+              # copy could return 0 too and leave the app serving 404s for its
+              # own assets. Verify the files arrived instead of trusting $?.
+              # No -mindepth (not in every busybox build) and no
+              # `test && continue` (its false branch trips set -e).
+              missing=$(cd "$src" && find . | while read -r f; do
+                if [ "$f" != "." ] && [ ! -e "/work/$f" ]; then
+                  echo "$f"
+                fi
+              done)
+              if [ -n "$missing" ]; then
+                echo "seed-public: these never reached /work:" >&2
+                echo "$missing" >&2
+                exit 1
+              fi
           {{- with $csc }}
           securityContext:
             {{- toYaml . | nindent 12 }}
