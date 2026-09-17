@@ -22,6 +22,11 @@ call:
 - **"Send it" / "ship it" means commit, push `main`, and tag a release.** All
   of it, in one go. Do not stop after the push and offer the tag as a next step.
 - Do not open PRs on this remote unless asked.
+- **Never hold a release back waiting for Todd to confirm a fix looks right.**
+  He views this app from the cluster, where Flux deploys the released image, so
+  an untagged commit is invisible to him. The release *is* how the change
+  becomes viewable -- withholding the tag until he can see it is circular. Get
+  the preflight right and tag.
 
 ## Procedure
 
