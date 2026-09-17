@@ -1,0 +1,32 @@
+image:
+  repository: ghcr.io/greyrock-labs/unleashed-voucher-manager
+  tag: ""
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 3000
+
+# Non-secret configuration, rendered into the Deployment as env vars.
+config:
+  UNLEASHED_URL: ""
+  UNLEASHED_SSID: ""
+  UNLEASHED_HAS_VALID_CERT: "true"
+  TIMEZONE: "UTC"
+  DAILY_ROLL_HOUR: "4"
+  DAILY_DURATION_HOURS: "24"
+  # 0 means unlimited devices may share the daily code.
+  DAILY_SHARE_NUMBER: "0"
+  WIFI_SSID: ""
+
+# Name of an existing Secret supplying UNLEASHED_USERNAME and
+# UNLEASHED_PASSWORD. How that Secret is produced is out of scope for this
+# chart.
+existingSecret: ""
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
