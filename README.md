@@ -186,6 +186,17 @@ keys. `WIFI_PASSWORD` is secret-shaped too — either set it as a plain
 `config.WIFI_PASSWORD` value or fold it into the same `existingSecret`,
 whichever fits how the rest of your cluster handles credentials.
 
+Keys left empty under `config:` are **not rendered into the Deployment at
+all**, rather than rendered as `value: ""`. Kubernetes gives `env`
+precedence over `envFrom`, so anything the chart renders would shadow the
+`existingSecret` instead of deferring to it; and the app distinguishes
+"variable unset" from "variable set to the empty string", so an empty
+`WIFI_TYPE` is an *invalid* type rather than "use the default" and would
+disable the QR code. If your guest network is genuinely open — no password
+at all — set `wifiOpenNetwork: true`, which is the one supported way to
+render a deliberately empty `WIFI_PASSWORD`. It is mutually exclusive with
+`config.WIFI_PASSWORD`; setting both fails the render.
+
 ```bash
 helm install guest-wifi oci://ghcr.io/greyrock-labs/helm/unleashed-voucher-manager \
   --set config.UNLEASHED_URL="https://unleashed.example.com" \

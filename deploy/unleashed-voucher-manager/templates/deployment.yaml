@@ -23,11 +23,40 @@ spec:
           ports:
             - name: http
               containerPort: 3000
+          {{- if and .Values.wifiOpenNetwork .Values.config.WIFI_PASSWORD }}
+          {{- fail "wifiOpenNetwork is true but config.WIFI_PASSWORD is also set -- an open network has no password, so set only one of them" }}
+          {{- end }}
+          {{- /*
+            Empty values are skipped, never rendered as `value: ""`.
+
+            Two reasons. First, `env` beats `envFrom` on a name collision in
+            Kubernetes, so an always-rendered `WIFI_PASSWORD: ""` silently
+            shadowed the Secret that `existingSecret` is documented to
+            supply it through. Second, the entrypoint writes every key it
+            sees into runtime-config.json, and the frontend distinguishes
+            "unset" from "" -- an empty WIFI_TYPE is not "use the default",
+            it falls through to the invalid-type branch and kills the QR
+            code outright.
+
+            An open network genuinely needs an explicit empty WIFI_PASSWORD;
+            `wifiOpenNetwork` below is how you ask for one.
+          */}}
+          {{- $env := dict }}
+          {{- range $key, $value := .Values.config }}
+          {{- if ne ($value | toString) "" }}
+          {{- $_ := set $env $key ($value | toString) }}
+          {{- end }}
+          {{- end }}
+          {{- if .Values.wifiOpenNetwork }}
+          {{- $_ := set $env "WIFI_PASSWORD" "" }}
+          {{- end }}
+          {{- if $env }}
           env:
-            {{- range $key, $value := .Values.config }}
+            {{- range $key, $value := $env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+          {{- end }}
           {{- if .Values.existingSecret }}
           envFrom:
             - secretRef:

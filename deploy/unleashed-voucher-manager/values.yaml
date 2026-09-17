@@ -10,6 +10,16 @@ service:
   port: 3000
 
 # Non-secret configuration, rendered into the Deployment as env vars.
+#
+# Keys left empty here are NOT rendered at all -- they are not rendered as
+# `value: ""`. That matters twice over:
+#   * `env` beats `envFrom` on a name collision, so anything rendered here
+#     would shadow the `existingSecret` below rather than defer to it.
+#   * the app distinguishes "variable unset" from "variable set to the empty
+#     string"; an empty WIFI_TYPE is not "use the default", it is an invalid
+#     type and disables the WiFi QR code.
+# To deliberately send an empty WIFI_PASSWORD (an open network), use
+# `wifiOpenNetwork` below rather than setting it to "" here.
 config:
   UNLEASHED_URL: ""
   UNLEASHED_SSID: ""
@@ -19,18 +29,36 @@ config:
   DAILY_DURATION_HOURS: "24"
   # 0 means unlimited devices may share the daily code.
   DAILY_SHARE_NUMBER: "0"
+  # SSID encoded into the WiFi QR code on /display. Required, together with
+  # a password (or wifiOpenNetwork), for the QR to render at all.
   WIFI_SSID: ""
   # WIFI_PASSWORD is secret-shaped; leave it empty here and supply it via
   # existingSecret instead if you'd rather not put it in values/plain env.
+  # Left empty it is not rendered, so the Secret's copy is what reaches the
+  # container. For an open network with no password at all, set
+  # wifiOpenNetwork below.
   WIFI_PASSWORD: ""
+  # WPA | WEP | nopass. Empty means unset, and the app infers it: WPA when a
+  # password is present, nopass when it is deliberately blank.
   WIFI_TYPE: ""
+  # Empty means unset, which the app reads as false (the SSID is broadcast).
   WIFI_HIDDEN: ""
+  # Empty means unset, which the app reads as false.
   IS_LOGO_INVERTIBLE: ""
+
+# Set true only when the guest WiFi is an open network with no password.
+# The QR code has to tell "no password, deliberately" apart from "not
+# configured yet", so this renders an explicit empty WIFI_PASSWORD env var
+# -- the one case where an empty value is meaningful. Mutually exclusive
+# with config.WIFI_PASSWORD; setting both fails the render.
+wifiOpenNetwork: false
 
 # Name of an existing Secret supplying UNLEASHED_USERNAME and
 # UNLEASHED_PASSWORD. How that Secret is produced is out of scope for this
 # chart. WIFI_PASSWORD may also be supplied through this Secret instead of
-# `config.WIFI_PASSWORD` above, since it is secret-shaped too.
+# `config.WIFI_PASSWORD` above, since it is secret-shaped too -- leave
+# `config.WIFI_PASSWORD` empty and the Secret's value is what the container
+# sees.
 existingSecret: ""
 
 resources: {}
