@@ -22,10 +22,14 @@ services:
 
     # SEE README FOR ENVIRONMENT VARIABLES DOCUMENTATION
     environment:
-      UNIFI_CONTROLLER_URL: "URL to your UniFi controller with protocol (`http://` or `https://`)."
-      UNIFI_API_KEY: "API Key for your UniFi controller."
-      UNIFI_HAS_VALID_CERT: "true" # Set to false only if your UniFi controller does not use a valid SSL certificate. Typically, this should remain true when accessing the controller (UNIFI_CONTROLLER_URL) through a reverse proxy or any setup providing trusted SSL certificates (e.g., Let's Encrypt).
-      WIFI_SSID: "Your guest WiFi SSID" # Optional, but recommended
-      WIFI_PASSWORD: "Youw guest WiFi password" # Optional, but recommended
-      GUEST_SUBNETWORK: "Your guest subnetwork in IPv4 CIDR notation (X.X.X.X/X)" # Optional, but recommended
-      TIMEZONE: "Your timezone (America/Toronto)" # Optional, but recommended
+      UNLEASHED_URL: "https://unleashed.example.com"
+      UNLEASHED_USERNAME: "guestpass"
+      UNLEASHED_PASSWORD: "changeme"
+      UNLEASHED_SSID: "Guest"
+      UNLEASHED_HAS_VALID_CERT: "true"
+      TIMEZONE: "UTC"
+      DAILY_ROLL_HOUR: "4"
+      DAILY_DURATION_HOURS: "24"
+      DAILY_SHARE_NUMBER: "0"
+      WIFI_SSID: "Guest"
+      WIFI_PASSWORD: ""
