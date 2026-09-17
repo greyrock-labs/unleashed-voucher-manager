@@ -20,10 +20,17 @@ config:
   # 0 means unlimited devices may share the daily code.
   DAILY_SHARE_NUMBER: "0"
   WIFI_SSID: ""
+  # WIFI_PASSWORD is secret-shaped; leave it empty here and supply it via
+  # existingSecret instead if you'd rather not put it in values/plain env.
+  WIFI_PASSWORD: ""
+  WIFI_TYPE: ""
+  WIFI_HIDDEN: ""
+  IS_LOGO_INVERTIBLE: ""
 
 # Name of an existing Secret supplying UNLEASHED_USERNAME and
 # UNLEASHED_PASSWORD. How that Secret is produced is out of scope for this
-# chart.
+# chart. WIFI_PASSWORD may also be supplied through this Secret instead of
+# `config.WIFI_PASSWORD` above, since it is secret-shaped too.
 existingSecret: ""
 
 resources: {}
