@@ -10,9 +10,42 @@ use tracing_subscriber::EnvFilter;
 use backend::{
     environment::{ENVIRONMENT, Environment},
     handlers::*,
-    tasks::run_daily_rotation,
+    tasks::{run_daily_rotation, run_pass_cache_refresh},
     unleashed_api::{UNLEASHED_API, UnleashedApi},
 };
+
+/// Delay between controller connection attempts at startup.
+const CONNECT_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Connect to the Unleashed controller, retrying until it answers.
+///
+/// Deliberately run as a background task rather than before `axum::serve`:
+/// the listener has to come up even during a controller outage. Blocking
+/// startup on the controller means any restart mid-outage -- a node drain,
+/// an image pull, a cluster upgrade -- never serves anything and turns into
+/// CrashLoopBackOff, which is precisely what `/api/health` answering
+/// 200-with-`degraded` exists to avoid.
+async fn connect_to_controller() {
+    loop {
+        match UnleashedApi::try_new().await {
+            Ok(api) => {
+                if UNLEASHED_API.set(api).is_err() {
+                    warn!("UnleashedApi was already initialised, keeping the existing client");
+                }
+                info!("Successfully connected to Unleashed controller");
+                return;
+            }
+            Err(e) => {
+                error!("Failed to initialize UnleashedApi: {}", e);
+                warn!(
+                    "Retrying connection in {} seconds...",
+                    CONNECT_RETRY_DELAY.as_secs()
+                );
+                tokio::time::sleep(CONNECT_RETRY_DELAY).await;
+            }
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -35,23 +68,6 @@ async fn main() {
     ENVIRONMENT.set(env).expect("Failed to set environment variables");
     let environment = ENVIRONMENT.get().expect("Environment not set");
 
-    loop {
-        match UnleashedApi::try_new().await {
-            Ok(api) => {
-                UNLEASHED_API.set(api).expect("Failed to set UnleashedApi");
-                info!("Successfully connected to Unleashed controller");
-                break;
-            }
-            Err(e) => {
-                error!("Failed to initialize UnleashedApi: {}", e);
-                warn!("Retrying connection in 5 seconds...");
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-            }
-        }
-    }
-
-    tokio::spawn(run_daily_rotation());
-
     let cors = CorsLayer::new()
         .allow_headers([http::header::CONTENT_TYPE])
         .allow_methods([Method::POST, Method::GET])
@@ -68,10 +84,24 @@ async fn main() {
         "{}:{}",
         environment.backend_bind_host, environment.backend_bind_port
     );
-    let listener = tokio::net::TcpListener::bind(&bind_address)
-        .await
-        .expect("Could not bind listener");
+    let listener = match tokio::net::TcpListener::bind(&bind_address).await {
+        Ok(listener) => listener,
+        Err(e) => {
+            error!("Could not bind listener on {bind_address}: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    // Everything that touches the controller runs behind the listener, so a
+    // controller outage degrades this app instead of preventing it from
+    // starting. Both tasks cope with `UNLEASHED_API` not being set yet.
+    tokio::spawn(connect_to_controller());
+    tokio::spawn(run_pass_cache_refresh());
+    tokio::spawn(run_daily_rotation());
 
     info!("Server running on http://{}", bind_address);
-    axum::serve(listener, app).await.expect("Axum server should never error");
+    if let Err(e) = axum::serve(listener, app).await {
+        error!("Axum server stopped: {e}");
+        std::process::exit(1);
+    }
 }

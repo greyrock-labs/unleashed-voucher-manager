@@ -1,14 +1,49 @@
-use axum::{http::StatusCode, response::Json};
+use std::sync::{
+    RwLock,
+    atomic::{AtomicBool, Ordering},
+};
+
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Json, Response},
+};
 use chrono::Utc;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 use crate::{
     environment::ENVIRONMENT,
     models::*,
-    unleashed_api::{CreateOutcome, UNLEASHED_API},
+    unleashed_api::{CreateOutcome, UNLEASHED_API, UnleashedApi},
 };
 
 pub const DAILY_NAME_PREFIX: &str = "daily-";
+
+/// Response header on `/api/passes/daily` saying whether the pass served is
+/// the one the current period expects. `false` means either that today's
+/// roll has not landed yet, or that this came from the in-memory cache
+/// because the controller is unreachable.
+pub const DAILY_PASS_CURRENT_HEADER: &str = "x-daily-pass-current";
+
+/// The last daily pass successfully resolved from the controller.
+///
+/// A controller blip must not blank the guest display: the code printed on
+/// the wall stays valid for its full duration regardless of whether this
+/// app can currently talk to the controller, so a failed refresh never
+/// clears this.
+static DAILY_SNAPSHOT: RwLock<Option<DailySnapshot>> = RwLock::new(None);
+
+/// Whether the last controller round-trip succeeded. Read by `/api/health`
+/// so the probe never waits on the controller itself -- see
+/// `health_check_handler`.
+static CONTROLLER_REACHABLE: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug, Clone)]
+pub struct DailySnapshot {
+    pub pass: GuestPass,
+    /// True when `pass` is the one the period in effect at fetch time
+    /// expected, rather than a stale fallback.
+    pub current: bool,
+}
 
 /// Find the pass to display. Returns the pass and whether it is the one the
 /// current period expects; a stale fallback keeps the display populated when
@@ -41,13 +76,73 @@ fn to_status(e: &UnleashedError) -> StatusCode {
     }
 }
 
+/// The controller client, or 503 if the background connect task has not
+/// published it yet.
+///
+/// The listener comes up before the controller connection does (see
+/// `main`), so every handler has to cope with the client being absent. The
+/// old `UNLEASHED_API.get().expect(...)` would abort the whole process
+/// under `panic = "abort"`, taking the frontend down with it.
+fn client() -> Result<&'static UnleashedApi, StatusCode> {
+    UNLEASHED_API.get().ok_or_else(|| {
+        warn!("Controller client is not available yet, answering 503");
+        StatusCode::SERVICE_UNAVAILABLE
+    })
+}
+
+pub fn controller_reachable() -> bool {
+    CONTROLLER_REACHABLE.load(Ordering::Relaxed)
+}
+
+fn snapshot() -> Option<DailySnapshot> {
+    // A poisoned lock means some other task panicked while holding it; the
+    // cached pass itself is still fine, and panicking again here would
+    // abort the process.
+    DAILY_SNAPSHOT
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+}
+
+/// Refresh the cached daily pass and the controller-reachability flag.
+///
+/// A failure marks the controller unreachable but deliberately leaves any
+/// existing snapshot in place -- the whole point of the cache is to keep
+/// serving the last known-good code through an outage.
+pub async fn refresh_daily_cache() {
+    let Some(client) = UNLEASHED_API.get() else {
+        CONTROLLER_REACHABLE.store(false, Ordering::Relaxed);
+        return;
+    };
+
+    match client.list_passes().await {
+        Ok(passes) => {
+            CONTROLLER_REACHABLE.store(true, Ordering::Relaxed);
+            if let Some((pass, current)) = resolve_daily_pass(&passes, &expected_daily_name()) {
+                *DAILY_SNAPSHOT.write().unwrap_or_else(|e| e.into_inner()) = Some(DailySnapshot {
+                    pass: pass.clone(),
+                    current,
+                });
+            }
+        }
+        Err(e) => {
+            warn!("Could not refresh the daily guest pass from the controller: {e}");
+            CONTROLLER_REACHABLE.store(false, Ordering::Relaxed);
+        }
+    }
+}
+
 pub async fn list_passes_handler() -> Result<Json<Vec<GuestPass>>, StatusCode> {
     debug!("Received request to list guest passes");
-    let client = UNLEASHED_API.get().expect("UnleashedApi not initialized");
+    let client = client()?;
     match client.list_passes().await {
-        Ok(passes) => Ok(Json(passes)),
+        Ok(passes) => {
+            CONTROLLER_REACHABLE.store(true, Ordering::Relaxed);
+            Ok(Json(passes))
+        }
         Err(e) => {
             error!("Failed to list guest passes: {}", e);
+            CONTROLLER_REACHABLE.store(false, Ordering::Relaxed);
             Err(to_status(&e))
         }
     }
@@ -57,9 +152,12 @@ pub async fn create_pass_handler(
     Json(request): Json<CreatePassRequest>,
 ) -> Result<Json<GuestPass>, StatusCode> {
     debug!("Received request to create a guest pass");
-    let client = UNLEASHED_API.get().expect("UnleashedApi not initialized");
+    let client = client()?;
     match client.create_pass(&request).await {
         Ok(CreateOutcome::Created(pass)) => Ok(Json(*pass)),
+        // The controller rejected the name as a duplicate. 409 rather than a
+        // generic failure so the UI can say so specifically -- passes can
+        // never be deleted, so this is a permanent condition for that name.
         Ok(CreateOutcome::AlreadyExists) => Err(StatusCode::CONFLICT),
         Err(e) => {
             error!("Failed to create guest pass: {}", e);
@@ -68,41 +166,57 @@ pub async fn create_pass_handler(
     }
 }
 
-pub async fn daily_pass_handler() -> Result<Json<GuestPass>, StatusCode> {
-    debug!("Received request for today's guest pass");
-    let client = UNLEASHED_API.get().expect("UnleashedApi not initialized");
-    let passes = client.list_passes().await.map_err(|e| {
-        error!("Failed to list guest passes: {}", e);
-        to_status(&e)
-    })?;
+fn daily_response(pass: &GuestPass, current: bool) -> Response {
+    (
+        [(
+            DAILY_PASS_CURRENT_HEADER,
+            if current { "true" } else { "false" },
+        )],
+        Json(pass.clone()),
+    )
+        .into_response()
+}
 
-    match resolve_daily_pass(&passes, &expected_daily_name()) {
-        Some((pass, _current)) => Ok(Json(pass.clone())),
-        None => Err(StatusCode::NOT_FOUND),
+pub async fn daily_pass_handler() -> Result<Response, StatusCode> {
+    debug!("Received request for today's guest pass");
+
+    // Only go to the controller when it is believed to be up, or when the
+    // cache has nothing to fall back on. During a known outage the call
+    // would just block for the full 30s client timeout before failing, and
+    // the cache already holds the code printed on the wall.
+    if controller_reachable() || snapshot().is_none() {
+        refresh_daily_cache().await;
+    }
+
+    let reachable = controller_reachable();
+    match snapshot() {
+        Some(snap) => {
+            let current = snap.current && reachable;
+            if !reachable {
+                warn!(
+                    "Serving the cached guest pass {} -- the controller is unreachable",
+                    snap.pass.name
+                );
+            }
+            Ok(daily_response(&snap.pass, current))
+        }
+        // Nothing cached and the controller answered: there genuinely is no
+        // daily pass yet.
+        None if reachable => Err(StatusCode::NOT_FOUND),
+        // Nothing cached and no controller: we simply do not know yet.
+        None => Err(StatusCode::SERVICE_UNAVAILABLE),
     }
 }
 
-/// Map a controller list-passes outcome to the health response. Factored out
-/// of the handler so the three reportable states -- reachable with today's
-/// pass current, reachable but stale/missing, and unreachable -- can be unit
-/// tested directly without standing up a mock controller.
-fn health_from_passes(passes: Option<&[GuestPass]>, expected_name: &str) -> HealthCheckResponse {
-    match passes {
-        Some(passes) => {
-            let daily_pass_current = resolve_daily_pass(passes, expected_name)
-                .map(|(_, current)| current)
-                .unwrap_or(false);
-            HealthCheckResponse {
-                status: "ok".to_string(),
-                daily_pass_current,
-                controller_reachable: true,
-            }
-        }
-        None => HealthCheckResponse {
-            status: "degraded".to_string(),
-            daily_pass_current: false,
-            controller_reachable: false,
-        },
+/// Build the health response from cached state alone.
+///
+/// Factored out of the handler so the reportable states can be unit tested
+/// directly without standing up a mock controller.
+fn health_from_cache(reachable: bool, snapshot: Option<&DailySnapshot>) -> HealthCheckResponse {
+    HealthCheckResponse {
+        status: if reachable { "ok" } else { "degraded" }.to_string(),
+        daily_pass_current: reachable && snapshot.is_some_and(|s| s.current),
+        controller_reachable: reachable,
     }
 }
 
@@ -115,27 +229,30 @@ fn health_from_passes(passes: Option<&[GuestPass]>, expected_name: &str) -> Heal
 // reports `status: "degraded"` / `controllerReachable: false` in the body so
 // the truth is visible to anyone who reads the response rather than just the
 // status code. Do not "fix" this by returning a non-2xx on failure.
-pub async fn health_check_handler() -> Result<Json<HealthCheckResponse>, StatusCode> {
+//
+// It also answers purely from cached state and never awaits the controller.
+// The reqwest client's timeout is 30s and a call may include a re-login, far
+// longer than any sane probe `timeoutSeconds` -- so hitting the controller
+// here would fail the probe on timeout during an outage and produce exactly
+// the crash-loop the paragraph above exists to prevent. The background
+// refresh task keeps the cache current.
+pub async fn health_check_handler() -> Json<HealthCheckResponse> {
     debug!("Received health check request");
-    let client = UNLEASHED_API.get().expect("UnleashedApi not initialized");
-    let response = match client.list_passes().await {
-        Ok(passes) => health_from_passes(Some(&passes), &expected_daily_name()),
-        Err(e) => {
-            error!("Failed to list guest passes for health check: {}", e);
-            health_from_passes(None, &expected_daily_name())
-        }
-    };
-
-    Ok(Json(response))
+    Json(health_from_cache(
+        controller_reachable(),
+        snapshot().as_ref(),
+    ))
 }
 
 #[cfg(test)]
 mod tests {
+    use self::backend_test_support::{pass, snapshot_of};
     use super::*;
-    use self::backend_test_support::pass;
 
     mod backend_test_support {
+        use super::DailySnapshot;
         use crate::models::GuestPass;
+
         pub fn pass(name: &str, created_at: i64) -> GuestPass {
             GuestPass {
                 id: name.to_string(),
@@ -150,6 +267,13 @@ mod tests {
                 share_number: 0,
                 client_macs: vec![],
                 remarks: String::new(),
+            }
+        }
+
+        pub fn snapshot_of(name: &str, current: bool) -> DailySnapshot {
+            DailySnapshot {
+                pass: pass(name, 100),
+                current,
             }
         }
     }
@@ -180,8 +304,7 @@ mod tests {
 
     #[test]
     fn health_reports_ok_when_todays_pass_is_current() {
-        let passes = vec![pass("daily-2026-09-16", 200)];
-        let health = health_from_passes(Some(&passes), "daily-2026-09-16");
+        let health = health_from_cache(true, Some(&snapshot_of("daily-2026-09-16", true)));
         assert_eq!(health.status, "ok");
         assert!(health.daily_pass_current);
         assert!(health.controller_reachable);
@@ -189,8 +312,7 @@ mod tests {
 
     #[test]
     fn health_reports_ok_but_stale_when_todays_pass_is_missing() {
-        let passes = vec![pass("daily-2026-09-15", 100)];
-        let health = health_from_passes(Some(&passes), "daily-2026-09-16");
+        let health = health_from_cache(true, Some(&snapshot_of("daily-2026-09-15", false)));
         assert_eq!(health.status, "ok");
         assert!(!health.daily_pass_current);
         assert!(health.controller_reachable);
@@ -200,9 +322,30 @@ mod tests {
     /// must say so -- this is the whole point of the fix.
     #[test]
     fn health_reports_degraded_when_controller_is_unreachable() {
-        let health = health_from_passes(None, "daily-2026-09-16");
+        let health = health_from_cache(false, None);
         assert_eq!(health.status, "degraded");
         assert!(!health.daily_pass_current);
+        assert!(!health.controller_reachable);
+    }
+
+    /// A cached pass keeps the display alive through an outage, but it must
+    /// not be reported as current -- nothing has confirmed it since the
+    /// controller went away.
+    #[test]
+    fn health_does_not_call_a_cached_pass_current_while_unreachable() {
+        let health = health_from_cache(false, Some(&snapshot_of("daily-2026-09-16", true)));
+        assert_eq!(health.status, "degraded");
+        assert!(!health.daily_pass_current);
+        assert!(!health.controller_reachable);
+    }
+
+    /// Startup, before the background connect task has published a client:
+    /// 200 with `controllerReachable: false`, never a 5xx that would fail a
+    /// probe and crash-loop the pod.
+    #[test]
+    fn health_is_degraded_but_ok_before_the_client_is_ready() {
+        let health = health_from_cache(false, None);
+        assert_eq!(health.status, "degraded");
         assert!(!health.controller_reachable);
     }
 }

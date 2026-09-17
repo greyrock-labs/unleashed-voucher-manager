@@ -1,12 +1,13 @@
-use chrono::{DateTime, Duration as ChronoDuration, LocalResult, NaiveDate, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, LocalResult, NaiveDate, TimeZone, Utc};
 use chrono_tz::Tz;
 use tokio::time::{Duration, sleep};
 use tracing::{error, info, warn};
 
 use crate::{
     environment::ENVIRONMENT,
+    handlers::refresh_daily_cache,
     models::{CreatePassRequest, UnleashedError, daily_pass_name, period_start_date},
-    unleashed_api::{CreateOutcome, UNLEASHED_API},
+    unleashed_api::{CreateOutcome, UNLEASHED_API, UnleashedApi},
 };
 
 /// Number of times the startup mint retries before deferring to the normal
@@ -14,6 +15,45 @@ use crate::{
 const STARTUP_RETRY_ATTEMPTS: u32 = 5;
 /// Delay between startup mint retries.
 const STARTUP_RETRY_DELAY: Duration = Duration::from_secs(60);
+/// How often the cached daily pass is refreshed from the controller.
+/// `/api/health` answers from that cache, so this is also how stale a
+/// health response can be.
+const CACHE_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
+/// How often to check whether the background connect task has published the
+/// controller client yet.
+const CLIENT_READY_POLL_INTERVAL: Duration = Duration::from_secs(2);
+
+/// Wait until the background connect task has published the controller
+/// client.
+///
+/// The listener now comes up before the controller connection does, so this
+/// task can start before there is anything to talk to. `expect`ing the
+/// client instead would abort the whole process under `panic = "abort"` --
+/// in the one task that must never die silently.
+async fn wait_for_client() -> &'static UnleashedApi {
+    let mut announced = false;
+    loop {
+        if let Some(client) = UNLEASHED_API.get() {
+            return client;
+        }
+        if !announced {
+            info!("Waiting for the Unleashed controller connection before minting");
+            announced = true;
+        }
+        sleep(CLIENT_READY_POLL_INTERVAL).await;
+    }
+}
+
+/// Keep the cached daily pass fresh so `/api/health` can answer from memory
+/// rather than waiting on a controller round-trip. The reqwest client's
+/// timeout is 30s and a call may include a re-login, far longer than any
+/// sane probe `timeoutSeconds`.
+pub async fn run_pass_cache_refresh() {
+    loop {
+        refresh_daily_cache().await;
+        sleep(CACHE_REFRESH_INTERVAL).await;
+    }
+}
 
 /// Resolve `date` at `hour:00:00` local time in `tz` to a concrete instant.
 ///
@@ -35,7 +75,15 @@ fn resolve_local_hour(date: NaiveDate, hour: u32, tz: Tz) -> DateTime<Tz> {
         }
     }
 
-    panic!("local time near {base} does not resolve in {tz} even after advancing past a DST gap");
+    // Unreachable against any real tz database -- no zone skips three
+    // consecutive local hours. It is a backstop, and under `panic = "abort"`
+    // a panic here would kill the process, so log loudly and carry on with
+    // an instant that definitely exists instead.
+    error!(
+        "local time near {base} does not resolve in {tz} even after advancing past a DST gap; \
+         falling back to interpreting it as UTC"
+    );
+    tz.from_utc_datetime(&base)
 }
 
 /// Seconds from `now` until the next occurrence of `roll_hour` local time.
@@ -64,7 +112,7 @@ pub fn seconds_until_next_roll(now: DateTime<Tz>, roll_hour: u32) -> i64 {
 /// code for the same day.
 async fn ensure_daily_pass() -> Result<(), UnleashedError> {
     let env = ENVIRONMENT.get().expect("Environment not set");
-    let client = UNLEASHED_API.get().expect("UnleashedApi not initialized");
+    let client = wait_for_client().await;
 
     let now = Utc::now().with_timezone(&env.timezone);
     let name = daily_pass_name(period_start_date(now, env.daily_roll_hour));

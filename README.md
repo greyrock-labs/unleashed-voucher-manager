@@ -256,7 +256,7 @@ working default.
 |---|---|---|
 | `/api/passes` | `GET` | List all guest passes (optionally filter client-side by name in the UI). |
 | `/api/passes` | `POST` | Create a pass: `{ name, durationHours, shareNumber }`. |
-| `/api/passes/daily` | `GET` | Today's pass. `404` if none can be resolved at all. |
+| `/api/passes/daily` | `GET` | Today's pass. Falls back to the last pass this app successfully resolved when the controller is unreachable, so a controller blip doesn't blank the guest display — the code printed on the wall stays valid either way. The `X-Daily-Pass-Current` response header is `false` when the pass served is stale or came from that cache. `404` when the controller answered but there is no daily pass at all; `503` when nothing is known yet (a cold start during an outage). |
 | `/api/health` | `GET` | See below. |
 
 `/api/health` **deliberately always returns HTTP 200**, even when the
@@ -270,9 +270,19 @@ reports the truth:
 { "status": "degraded", "dailyPassCurrent": false, "controllerReachable": false }
 ```
 
+It answers from an in-memory snapshot that a background task refreshes
+every 60s, and never waits on the controller itself — a probe's
+`timeoutSeconds` is always far below the 30s controller client timeout, so
+a blocking health check would fail the probe on timeout during an outage
+and cause the exact crash-loop described above. The trade-off is that
+`controllerReachable` can lag reality by up to a minute.
+
 **If you want a probe that actually fails when the controller is down**,
-point it at `GET /api/passes/daily` instead — that one returns a real
-non-2xx status when it can't resolve a pass.
+there isn't one by design, and that is deliberate — every endpoint here
+either keeps serving the last-known-good answer or reports the problem in
+its body. Alert on `controllerReachable: false` from `/api/health` (or on
+`dailyPassCurrent: false`, which also catches a roll that silently didn't
+happen) rather than wiring it to a Kubernetes probe.
 
 ## Troubleshooting
 
