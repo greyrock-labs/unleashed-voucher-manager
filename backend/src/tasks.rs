@@ -5,7 +5,7 @@ use tracing::{error, info, warn};
 
 use crate::{
     environment::ENVIRONMENT,
-    handlers::refresh_daily_cache,
+    handlers::{controller_reachable, refresh_daily_cache},
     models::{CreatePassRequest, UnleashedError, daily_pass_name, period_start_date},
     unleashed_api::{CreateOutcome, UNLEASHED_API, UnleashedApi},
 };
@@ -15,10 +15,15 @@ use crate::{
 const STARTUP_RETRY_ATTEMPTS: u32 = 5;
 /// Delay between startup mint retries.
 const STARTUP_RETRY_DELAY: Duration = Duration::from_secs(60);
-/// How often the cached daily pass is refreshed from the controller.
-/// `/api/health` answers from that cache, so this is also how stale a
-/// health response can be.
+/// How often the cached daily pass is refreshed from the controller while
+/// the controller is answering. `/api/health` reads that cache, so this is
+/// also how stale a health response can be.
 const CACHE_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
+/// How often to retry while the controller is NOT answering. Shorter so a
+/// pod that has just started, or one recovering from an outage, stops
+/// reporting `degraded` as soon as the controller is actually reachable
+/// rather than at the next minute boundary.
+const CACHE_RETRY_INTERVAL: Duration = Duration::from_secs(5);
 /// How often to check whether the background connect task has published the
 /// controller client yet.
 const CLIENT_READY_POLL_INTERVAL: Duration = Duration::from_secs(2);
@@ -51,7 +56,12 @@ async fn wait_for_client() -> &'static UnleashedApi {
 pub async fn run_pass_cache_refresh() {
     loop {
         refresh_daily_cache().await;
-        sleep(CACHE_REFRESH_INTERVAL).await;
+        sleep(if controller_reachable() {
+            CACHE_REFRESH_INTERVAL
+        } else {
+            CACHE_RETRY_INTERVAL
+        })
+        .await;
     }
 }
 
