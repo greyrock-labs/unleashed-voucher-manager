@@ -7,11 +7,11 @@ export interface GuestPass {
   /** null until the guest first uses the pass */
   activatedAt: number | null;
   /**
-   * For an unused pass this is the deadline to first use (fixed by the
-   * controller at 7 days). For a used pass it is activatedAt + validTimeSecs.
+   * When network access ends -- createdAt + validTimeSecs, claimed or not,
+   * given the creation-time validity the README requires of the controller.
    */
   expiresAt: number;
-  /** seconds of access granted once the pass is first used */
+  /** seconds of access the pass grants, counted from creation */
   validTimeSecs: number;
   used: boolean;
   /** 0 means unlimited devices */

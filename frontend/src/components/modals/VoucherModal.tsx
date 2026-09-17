@@ -28,10 +28,8 @@ export default function VoucherModal({ pass, onClose }: Props) {
           ReactNode,
         ][])
       : []),
-    [
-      pass.used ? "Expires" : "Must be claimed by",
-      formatDateTime(pass.expiresAt),
-    ],
+    // Always "Expires" -- see the note in VoucherCard.
+    ["Expires", formatDateTime(pass.expiresAt)],
     ["Session Length", formatDurationSecs(pass.validTimeSecs)],
     ["Devices", formatDevices(pass.shareNumber)],
     ["Connected Devices", String(pass.clientMacs.length)],

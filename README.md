@@ -15,9 +15,11 @@ with the Unleashed protocol work informed by
 
 ## Read this before you file a bug
 
-Three behaviours below are properties of how the Unleashed controller and
-its "Guest Pass Manager" account role work, not bugs in this app. All three
-were verified empirically against a live controller.
+Three behaviours below come from how the Unleashed controller and its
+"Guest Pass Manager" account role work, not from bugs in this app. All
+three were verified empirically against a live controller. The second one
+is fixed by configuring the controller correctly; the other two are not
+fixable at all.
 
 ### 1. This app cannot delete passes
 
@@ -33,22 +35,18 @@ must periodically delete expired/unwanted passes yourself in the Unleashed
 admin UI (`Users -> Guest Access -> Guest Pass List`, or similar, depending
 on firmware). This app cannot do it for you.
 
-### 2. An unused code stays claimable for 7 days
+### 2. Pass lifetime hangs on a controller setting you must set yourself
 
-When a guest pass is created, the controller gives it a fixed 7-day window
-in which it can first be used, and this app has no way to shorten it — the
-controller silently ignores any attempt to set it. This means:
+The controller decides when a pass's validity clock starts, and it decides
+it globally — there is no per-pass field this app could send. **Set it to
+"Effective from the creation time"**; see
+[Controller setup](#controller-setup) below. Everything here assumes it.
 
-- **A new daily code does NOT invalidate yesterday's.** If a guest wrote
-  down yesterday's code, it still works today, tomorrow, and for a week
-  after it was created (or until it's used, see below).
-- Once a code **is** used, it stops being an "unused pass" — it then
-  expires 24 hours after that first use (or after whatever
-  `DAILY_DURATION_HOURS` / duration was configured), not 7 days.
-
-If you need yesterday's code to stop working the moment a new one is
-minted, this app cannot do that; the controller doesn't expose that
-control to this account.
+Left on the other option, "Effective from first use", a pass's duration
+only begins counting when a guest first connects, and until then the code
+stays claimable for a separate unused window (7 days by default). The
+visible symptom is that **a new daily code does not invalidate yesterday's**
+— a guest who copied one off the wall last week can still claim it.
 
 ### 3. `DAILY_SHARE_NUMBER=0` (the default) means unlimited devices
 
@@ -62,14 +60,13 @@ if you specifically want a single-use-per-device code.
 
 - **Daily rotation.** Once a day, at `DAILY_ROLL_HOUR` (in `TIMEZONE`), the
   backend mints a new guest pass named `daily-YYYY-MM-DD`, good for
-  `DAILY_DURATION_HOURS` once activated, shared by `DAILY_SHARE_NUMBER`
-  devices (default: unlimited). It also mints one on startup if today's
-  pass doesn't exist yet.
+  `DAILY_DURATION_HOURS` from the moment it is minted, shared by
+  `DAILY_SHARE_NUMBER` devices (default: unlimited). It also mints one on
+  startup if today's pass doesn't exist yet.
 - **`/display`** — a read-only, guest-facing page: today's code in large
-  text, a WiFi QR code (if `WIFI_SSID`/`WIFI_PASSWORD` are configured), how
-  many devices may still use it, and whether it's "claimable until" (unused)
-  or "expires at" (already activated). Meant to be left open on a tablet or
-  TV near your guest network.
+  text and a WiFi QR code beside it (if `WIFI_SSID`/`WIFI_PASSWORD` are
+  configured). Deliberately nothing else — it is meant to be left open on a
+  tablet or TV near your guest network and read from across a room.
 - **`/`** — the admin UI: Quick Create (preset durations, one click),
   Custom Create (name, duration, device-share count), and a browsable/
   searchable list of existing passes. No delete controls exist here either,
@@ -96,23 +93,22 @@ and `/api/health` reports it as stale (`dailyPassCurrent: false`).
 This distinction has confused people working on this project before, so it
 is spelled out explicitly:
 
-- **`validTimeSecs`** is how much access time a pass grants, counted from
-  the moment it's *first used* (activated). This is what
-  `DAILY_DURATION_HOURS` / the "Duration" field sets. It has nothing to do
-  with how long the code sits around waiting to be claimed.
-- **`expiresAt`** means two different things depending on whether the pass
-  has been used:
-  - **Unused pass:** the deadline by which it must first be used — always
-    7 days after creation, fixed by the controller, not configurable (see
-    constraint #2 above).
-  - **Used pass:** `activatedAt + validTimeSecs` — i.e. the actual
-    expiration of network access.
+- **`validTimeSecs`** is how much access time a pass grants. This is what
+  `DAILY_DURATION_HOURS` / the "Duration" field sets.
+- **`expiresAt`** is when access ends. With the controller configured as
+  [Controller setup](#controller-setup) requires, that is simply
+  `createdAt + validTimeSecs`.
 
-  `/display` labels this correctly depending on state: "Must be claimed
-  by" for an unused pass, "Expires" for a used one.
+`activatedAt` — and the Used/Available badge in the admin UI — records when
+a guest first connected. It no longer has any bearing on when the pass
+dies; it is there to tell you whether anyone has claimed the code yet.
 
-An unused 1-hour pass will show an `expiresAt` a week away. That's correct
-— it hasn't been claimed yet, so the 1-hour clock hasn't started.
+Against a controller left on **first-use** validity, `expiresAt` instead
+means two different things: for an unused pass it is the deadline to first
+use it (creation plus the "expire if not used" window, a week by default),
+and only for a used pass is it the real end of access. The UI labels it
+"Expires" either way, so an unclaimed 1-hour pass reads as expiring a week
+out. Setting the controller correctly is what keeps that label honest.
 
 ### Durations are always whole hours
 
@@ -126,6 +122,49 @@ right because it converts to hours before sending (its own bundle calls
 This app takes the same approach for the same reason: it only ever sends
 `duration-unit='hour'` and expresses every duration — including
 `DAILY_DURATION_HOURS` and the Custom Create form — in whole hours.
+
+## Controller setup
+
+One setting on the Unleashed controller itself has to be right before any
+of this behaves as documented, and this app cannot set it — the controller
+exposes it globally, not per pass.
+
+In the controller admin UI, open the guest access configuration (the exact
+path moves between firmware versions; look for the guest pass / self-service
+settings under Guest Access) and set:
+
+> **Effective Date of Validity Period → "Effective from the creation time"**
+
+That starts a pass's clock the moment it is minted, which is what the daily
+rotation assumes:
+
+- the daily code is good for exactly `DAILY_DURATION_HOURS` from the roll;
+- yesterday's code stops working on schedule instead of lingering;
+- `expiresAt`, in the API and in the UI, always means when access ends.
+
+The other option — "Effective from first use, expire if not used *N* days"
+— starts the clock on first connection instead, and is what constraint #2
+above describes. The app still runs against it, but the daily rotation
+stops being a rotation: every past code stays claimable for the full unused
+window.
+
+### The tradeoff this buys
+
+A pass now expires `DAILY_DURATION_HOURS` after it is created, whatever
+time a guest turns up. With the defaults — roll at 4am, 24-hour duration —
+someone connecting at 3am gets an hour of access, not a day.
+
+If that matters, set `DAILY_DURATION_HOURS` above `24` so consecutive days
+overlap. At `30`, each code outlives the next roll by six hours: nobody
+ever gets less than six hours, at the cost of yesterday's code staying live
+until 10am.
+
+### Leave the global validity duration alone
+
+The same screen carries a default validity duration (`480 minutes` out of
+the box). It does not need changing. This app sends an explicit `duration`
+on every create, which overrides it — as the controller's own tooltip says,
+"Validity duration can be configured when creating guest pass".
 
 ## Quick start (Docker Compose)
 
@@ -268,7 +307,7 @@ working default.
 | `TIMEZONE` | `UTC` | [IANA timezone identifier](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones), e.g. `America/New_York`. Governs `DAILY_ROLL_HOUR` and all displayed times. |
 | `DAILY_ROLL_HOUR` | `4` | Local hour (0–23) at which the next daily pass is minted. See "How the current period is determined" above. |
 | `DAILY_DURATION_HOURS` | `24` | Whole hours of access the daily pass grants once activated. Minimum 1. |
-| `DAILY_SHARE_NUMBER` | `0` | Devices allowed to share the daily code. **`0` = unlimited (default); `1` admits exactly one device and locks out every other guest** — see constraint #3 above. |
+| `DAILY_DURATION_HOURS` | `24` | Whole hours of access the daily pass grants, counted from the moment it is minted. Minimum 1. Assumes the controller is set to creation-time validity — see [Controller setup](#controller-setup). |
 | `WIFI_SSID` | unset | SSID encoded into the WiFi QR code on `/display`. Required (with `WIFI_PASSWORD`) for the QR to render. |
 | `WIFI_PASSWORD` | unset | Password encoded into the WiFi QR code. Use an empty string `""` for an open network with no password — **omitting the variable entirely, rather than setting it to `""`, is what silently disables the QR code** (the frontend needs to know a password was deliberately left blank vs. never configured). |
 | `WIFI_TYPE` | `WPA` if password set, else `nopass` | `WPA`, `WEP`, or `nopass`. |
@@ -328,9 +367,9 @@ happen) rather than wiring it to a Kubernetes probe.
 - **Old passes piling up in the controller's guest list.** Expected — see
   constraint #1. Prune them from the Unleashed admin UI directly; this app
   cannot delete.
-- **Yesterday's code still works after today's was minted.** Expected — see
-  constraint #2. Unused codes are claimable for 7 days regardless of newer
-  codes being created.
+- **Yesterday's code still works after today's was minted.** The controller
+  is on first-use validity. Switch it to "Effective from the creation time"
+  — see [Controller setup](#controller-setup).
 - **One guest connects and then nobody else can use the code.** Check
   `DAILY_SHARE_NUMBER` — it's probably set to `1`. Use `0` for unlimited.
 - **WiFi QR code isn't showing on `/display`.** Confirm both `WIFI_SSID`

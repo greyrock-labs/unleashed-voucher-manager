@@ -48,9 +48,11 @@ const VoucherCard = ({ pass, onClick }: Props) => {
           >
             {pass.used ? "Used" : "Available"}
           </span>
+          {/* Always "Expires": with the controller on creation-time validity
+              (see README, Controller setup) an unclaimed pass has a real
+              expiry too, so the old "Must be claimed by" label was wrong. */}
           <span className="text-xs">
-            {pass.used ? "Expires" : "Must be claimed by"}:{" "}
-            {formatDateTime(pass.expiresAt)}
+            Expires: {formatDateTime(pass.expiresAt)}
           </span>
         </div>
       </div>

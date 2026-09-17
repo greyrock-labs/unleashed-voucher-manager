@@ -40,12 +40,13 @@ pub struct GuestPass {
     /// None until the guest first uses the pass.
     #[serde(rename = "activatedAt")]
     pub activated_at: Option<i64>,
-    /// For an unused pass this is the deadline to first use (creation + 7
-    /// days, fixed by the controller). For a used pass it is
-    /// `activated_at + valid_time_secs`.
+    /// When network access ends. The controller must be set to
+    /// "Effective from the creation time" (see README, Controller setup),
+    /// which makes this `created_at + valid_time_secs` whether or not the
+    /// pass has been claimed.
     #[serde(rename = "expiresAt")]
     pub expires_at: i64,
-    /// Seconds of access granted once the pass is first used.
+    /// Seconds of access the pass grants, counted from creation.
     #[serde(rename = "validTimeSecs")]
     pub valid_time_secs: i64,
     pub used: bool,
