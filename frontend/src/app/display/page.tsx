@@ -54,31 +54,54 @@ export default function DisplayPage() {
 
   if (status === "loading") {
     return (
-      <main className="flex-center min-h-screen min-h-dvh bg-page">
+      <main className="flex-center h-screen h-dvh bg-page">
         <Spinner />
       </main>
     );
   }
 
   return (
-    <main className="flex min-h-screen min-h-dvh flex-col items-center justify-center gap-6 bg-page p-6 text-center sm:gap-8 sm:p-8">
-      <h1 className="text-2xl font-light text-secondary sm:text-3xl">
+    // h-dvh, not min-h-dvh: a definite height is what lets the QR below give
+    // way instead of the page growing. With min-h- the content set the height
+    // and justify-center then bled the overflow off both ends, which is how
+    // the "Scan to join" caption ended up under the fold.
+    <main className="flex h-screen h-dvh flex-col items-center justify-center gap-[clamp(0.5rem,2.5vh,2rem)] bg-page p-4 text-center sm:p-6">
+      <h1 className="font-light leading-tight text-secondary text-[clamp(1.125rem,min(4vw,4vh),1.875rem)]">
         Guest WiFi
       </h1>
 
       {status === "ok" && pass ? (
         <>
-          <p className="voucher-code text-6xl sm:text-8xl lg:text-9xl">
+          {/* Sized against the viewport rather than width breakpoints. This
+              screen is whatever a wall-mounted tablet or TV happens to be, and
+              the binding constraint is its height, which width breakpoints
+              know nothing about -- sm: fires the same on a 1024x768 panel as
+              on a 1024x400 one. min() also keeps the 11 monospace characters
+              inside a narrow viewport, and the clamp bounds keep it legible on
+              a phone without ballooning on a 4K panel. */}
+          <p className="voucher-code leading-none text-[clamp(2.5rem,min(12vw,12vh),8rem)]">
             {formatCode(pass.code)}
           </p>
 
-          {/* An explicit box is required. WifiQr measures its container and
-              sizes the QR to a fraction of it; as a content-sized flex item
-              it has no intrinsic size, so each measurement shrank the box
+          {/* flex-1 min-h-0 hands the QR whatever height is left, so the
+              caption cannot be pushed off-screen: the box shrinks instead.
+
+              An explicit box is still required. WifiQr measures its container
+              and sizes the QR to a fraction of it; as a content-sized flex
+              item it had no intrinsic size, so each measurement shrank the box
               and re-fired the ResizeObserver, converging down to the caption
-              width or the 32px floor. Sized here for a wall-mounted tablet
-              or TV. */}
-          <WifiQr className="h-64 w-64 sm:h-96 sm:w-96" imageSrc="/logo-mark.png" />
+              width or the 32px floor. A flex-1 height resolves from the
+              parent's free space rather than from content, so that loop cannot
+              start.
+
+              sizeRatio is below the 0.8 default to leave the last quarter of
+              the box for the caption and its gap, which at 0.8 would be
+              squeezed past the bottom edge of the box itself. */}
+          <WifiQr
+            className="min-h-0 w-full flex-1"
+            sizeRatio={0.75}
+            imageSrc="/logo-mark.png"
+          />
         </>
       ) : (
         <p className="max-w-md text-xl text-muted sm:text-2xl">
