@@ -1,285 +1,304 @@
-# UniFi Voucher Manager
+# Unleashed Voucher Manager
 
-[![Docker Image Version (latest by date)](https://img.shields.io/docker/v/etiennecollin/unifi-voucher-manager?sort=semver&label=Version&logo=docker&color=blue) ![Docker Pulls](https://img.shields.io/docker/pulls/etiennecollin/unifi-voucher-manager?label=Pulls&logo=docker&color=blue)](https://hub.docker.com/r/etiennecollin/unifi-voucher-manager)
-[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/etiennecollin/unifi-voucher-manager/release_docker.yaml?label=Docker%20Build&logo=github) ![GitHub License](https://img.shields.io/github/license/etiennecollin/unifi-voucher-manager?label=License&logo=github&color=red)](https://github.com/etiennecollin/unifi-voucher-manager)
+A small self-hosted web app that mints a guest WiFi code every day on a
+**Ruckus Unleashed** controller and displays it, next to a scannable WiFi QR
+code, on a wall-mounted tablet or kiosk. It also has a lightweight admin UI
+for creating one-off guest passes.
 
-UVM is a modern, touch-friendly web application for managing WiFi vouchers on UniFi controllers.
-Perfect for businesses, cafes, hotels, and home networks that need to provide guest WiFi access.
+It is not affiliated with, endorsed by, or sponsored by CommScope, RUCKUS
+Networks, or Ubiquiti Inc. See [NOTICE](./NOTICE) for full attribution —
+this project is derived from
+[etiennecollin/unifi-voucher-manager](https://github.com/etiennecollin/unifi-voucher-manager),
+with the Unleashed protocol work informed by
+[fmuffat/FetchPass](https://github.com/fmuffat/FetchPass) and
+[ms264556/aioruckus](https://github.com/ms264556/aioruckus).
 
-![WiFi Voucher Manager](./assets/view.png)
+## Read this before you file a bug
 
-<!-- vim-markdown-toc GFM -->
+Three behaviours below are properties of how the Unleashed controller and
+its "Guest Pass Manager" account role work, not bugs in this app. All three
+were verified empirically against a live controller.
 
-- [✨ Features](#-features)
-  - [🎫 Voucher Management & WiFi QR Code](#-voucher-management--wifi-qr-code)
-  - [Kiosk Display](#kiosk-display)
-  - [🎨 Modern Interface](#-modern-interface)
-  - [🔧 Technical Features](#-technical-features)
-- [🚀 Quick Start](#-quick-start)
-  - [Using Docker Compose (Recommended)](#using-docker-compose-recommended)
-  - [Without Docker](#without-docker)
-- [⚙️ Configuration](#-configuration)
-  - [Getting UniFi API Credentials](#getting-unifi-api-credentials)
-  - [Rolling Vouchers and Kiosk Page](#rolling-vouchers-and-kiosk-page)
-    - [How Rolling Vouchers Work](#how-rolling-vouchers-work)
-  - [Custom SVG Logo](#custom-svg-logo)
-  - [Environment Variables](#environment-variables)
-- [🐛 Troubleshooting](#-troubleshooting)
-  - [Common Issues](#common-issues)
-  - [Getting Help](#getting-help)
+### 1. This app cannot delete passes
 
-<!-- vim-markdown-toc -->
+The account it authenticates as (a Guest Pass Manager, deliberately scoped
+down from a full admin) is refused by the controller on every delete
+attempt — every delete-shaped request returns `AD_PrivilegeInsufficient`.
+The controller's own guest-management UI has no delete button for this role
+either. This is not a missing feature; there is no code path that could add
+it without a second, full-admin credential.
 
-## ✨ Features
+**Consequence:** old daily passes accumulate in the guest list forever. You
+must periodically delete expired/unwanted passes yourself in the Unleashed
+admin UI (`Users -> Guest Access -> Guest Pass List`, or similar, depending
+on firmware). This app cannot do it for you.
 
-### 🎫 Voucher Management & WiFi QR Code
+### 2. An unused code stays claimable for 7 days
 
-- **Quick Create** - Generate guest vouchers with preset durations (1 hour to 1 week)
-- **Custom Create** - Full control over voucher parameters:
-  - Custom name
-  - Duration (minutes to days)
-  - Guest count limits
-  - Data usage limits
-  - Upload/download speed limits
-- **Browse Vouchers** - Browse and search existing vouchers by name
-- **Bulk Operations** - Select and delete multiple vouchers at once
-- **Print Vouchers** - Print vouchers in either list or grid format; thermal printers friendly
-- **Auto-cleanup** - Remove expired vouchers with a single click
-- **QR Code** - Easily connect guests to your network
-- **Rolling Vouchers** - Automatically generate a voucher for the next guest when the current one gets used
+When a guest pass is created, the controller gives it a fixed 7-day window
+in which it can first be used, and this app has no way to shorten it — the
+controller silently ignores any attempt to set it. This means:
 
-### Kiosk Display
+- **A new daily code does NOT invalidate yesterday's.** If a guest wrote
+  down yesterday's code, it still works today, tomorrow, and for a week
+  after it was created (or until it's used, see below).
+- Once a code **is** used, it stops being an "unused pass" — it then
+  expires 24 hours after that first use (or after whatever
+  `DAILY_DURATION_HOURS` / duration was configured), not 7 days.
 
-The kiosk page (`/kiosk`) provides a guest-friendly interface displaying:
+If you need yesterday's code to stop working the moment a new one is
+minted, this app cannot do that; the controller doesn't expose that
+control to this account.
 
-- **QR Code**: For easy network connection (if configured in [Environment Variables](#environment-variables))
-- **Current Voucher**: The active rolling voucher code
-- **Real-time Updates**: Automatically refreshes when the rolling voucher changes
+### 3. `DAILY_SHARE_NUMBER=0` (the default) means unlimited devices
 
-### 🎨 Modern Interface
+`DAILY_SHARE_NUMBER` controls how many distinct devices may use the daily
+code. `0` is unlimited and is the default — appropriate for a shared
+guest code. **Setting it to `1` admits exactly one device and locks out
+every other guest** who tries the same code afterwards. Only change this
+if you specifically want a single-use-per-device code.
 
-- **Touch-Friendly** – Optimized for tablet, mobile, and desktop
-- **Dark/Light Mode** – Follows system preference, with manual override
-- **Responsive Design** - Works seamlessly across all screen sizes
-- **Smooth Animations** – Semantic transitions for polished UX
-- **Real-time Notifications** - Instant feedback for all operations
-- **Custom SVG Logo** - Display your own logo on the main page
+## What it does
 
-### 🔧 Technical Features
+- **Daily rotation.** Once a day, at `DAILY_ROLL_HOUR` (in `TIMEZONE`), the
+  backend mints a new guest pass named `daily-YYYY-MM-DD`, good for
+  `DAILY_DURATION_HOURS` once activated, shared by `DAILY_SHARE_NUMBER`
+  devices (default: unlimited). It also mints one on startup if today's
+  pass doesn't exist yet.
+- **`/display`** — a read-only, guest-facing page: today's code in large
+  text, a WiFi QR code (if `WIFI_SSID`/`WIFI_PASSWORD` are configured), how
+  many devices may still use it, and whether it's "claimable until" (unused)
+  or "expires at" (already activated). Meant to be left open on a tablet or
+  TV near your guest network.
+- **`/`** — the admin UI: Quick Create (preset durations, one click),
+  Custom Create (name, duration, device-share count), and a browsable/
+  searchable list of existing passes. No delete controls exist here either,
+  for the reason above.
+- **Custom SVG logo**, dark/light theme, live updates over SSE so `/display`
+  and `/` pick up new passes without a manual refresh.
 
-- **Docker Ready** - Easy deployment with Docker Compose and included healthcheck
-- **UniFi Integration** - Direct API connection to UniFi controllers
-- **Secure Architecture** - Next.js (TypeScript + Tailwind CSS) frontend with an Axum-based Rust backend that handles all UniFi Controller communication, keeping credentials isolated from the user-facing UI
+### How the "current period" is determined
 
-## 🚀 Quick Start
+The daily rotation doesn't key off the calendar date directly — it keys off
+the most recent `DAILY_ROLL_HOUR`. Example: with the default roll hour of
+`4` (4am), at 2am the "current period" is still the one that began
+yesterday at 4am, so there's never a window between midnight and the roll
+hour where today's pass doesn't exist yet but "today's" name is expected.
+The pass is always named `daily-<period-start-date>`.
 
-### Using Docker Compose (Recommended)
+If a roll is ever missed (backend was down, clock drift, controller was
+briefly unreachable), `/display` and `/api/passes/daily` fall back to
+showing the most recently created `daily-*` pass rather than going blank,
+and `/api/health` reports it as stale (`dailyPassCurrent: false`).
 
-1. **Create the configuration files**
-   ```bash
-   # Download the compose file
-   curl -o compose.yaml https://raw.githubusercontent.com/etiennecollin/unifi-voucher-manager/main/compose.yaml
+### `valid-time` vs. `expire-time` — read this carefully
+
+This distinction has confused people working on this project before, so it
+is spelled out explicitly:
+
+- **`validTimeSecs`** is how much access time a pass grants, counted from
+  the moment it's *first used* (activated). This is what
+  `DAILY_DURATION_HOURS` / the "Duration" field sets. It has nothing to do
+  with how long the code sits around waiting to be claimed.
+- **`expiresAt`** means two different things depending on whether the pass
+  has been used:
+  - **Unused pass:** the deadline by which it must first be used — always
+    7 days after creation, fixed by the controller, not configurable (see
+    constraint #2 above).
+  - **Used pass:** `activatedAt + validTimeSecs` — i.e. the actual
+    expiration of network access.
+
+  `/display` labels this correctly depending on state: "Must be claimed
+  by" for an unused pass, "Expires" for a used one.
+
+An unused 1-hour pass will show an `expiresAt` a week away. That's correct
+— it hasn't been claimed yet, so the 1-hour clock hasn't started.
+
+### Durations are always whole hours
+
+The Unleashed controller silently treats `duration-unit='day'` as hours (a
+"1 day" request produces a 1-hour pass). To avoid that trap, this app only
+ever sends `duration-unit='hour'` and expresses every duration — including
+`DAILY_DURATION_HOURS` and the Custom Create form — in whole hours.
+
+## Quick start (Docker Compose)
+
+1. Copy [`compose.yaml`](./compose.yaml) and fill in your controller details:
+
+   ```yaml
+   services:
+     unleashed-voucher-manager:
+       image: "ghcr.io/greyrock-labs/unleashed-voucher-manager:latest"
+       container_name: "unleashed-voucher-manager"
+       restart: "unless-stopped"
+       ports:
+         - "3000:3000"
+       environment:
+         UNLEASHED_URL: "https://unleashed.example.com"
+         UNLEASHED_USERNAME: "guestpass"
+         UNLEASHED_PASSWORD: "changeme"
+         UNLEASHED_SSID: "Guest"
+         UNLEASHED_HAS_VALID_CERT: "true"
+         TIMEZONE: "UTC"
+         DAILY_ROLL_HOUR: "4"
+         DAILY_DURATION_HOURS: "24"
+         DAILY_SHARE_NUMBER: "0"
+         WIFI_SSID: "Guest"
+         WIFI_PASSWORD: ""
    ```
-2. **Configure your environment**
-   - Set the required environment variables (see [Environment Variables](#environment-variables)) in the `compose.yaml` file.
-3. **Start the application**
+
+2. Start it:
+
    ```bash
-   docker compose up -d --force-recreate
+   docker compose up -d
    ```
-4. **Access the interface**
-   - Open your browser to `http://localhost:3000`.
+
+3. Admin UI: `http://localhost:3000/`. Guest display: `http://localhost:3000/display`.
+
+`UNLEASHED_USERNAME`/`UNLEASHED_PASSWORD` should be a Guest Pass Manager
+account on the controller, not a full admin — it doesn't need admin rights
+for anything this app does, and per constraint #1 above, it *can't* delete
+even if you wanted it to.
 
 ### Without Docker
 
-1. **Install the dependencies**
-   - `rust >= 1.88.0`
-   - `nodejs >= 24.3.0`
-   - `npm >= 11.4.2`
-2. **Clone the repository**
-   ```bash
-   git clone https://github.com/etiennecollin/unifi-voucher-manager
-   ```
-3. **Configure your environment**
-   - In your shell, set the required environment variables (see [Environment Variables](#environment-variables))
-     or set them in a `.env` file at the root of the repository and use the `dotenv` feature of the rust backend.
-4. **Start the frontend and backend**
+Requires `rust >= 1.88`, `nodejs >= 24.3`, `npm >= 11.4`.
 
-   ```bash
-   # Backend (without using a .env file)
-   cd backend && cargo run --release
+```bash
+# Backend
+cd backend && cargo run --release
+# ...or with a .env file:
+cd backend && cargo run --release --features dotenv
 
-   # Backend (using a .env file)
-   cd backend && cargo run --release --features dotenv
+# Frontend (separate terminal)
+cd frontend && npm install && npm run dev   # development
+cd frontend && npm ci && npm run build && npm run start  # production
+```
 
-   # Frontend (development)
-   cd frontend && npm install && npm run dev
+### Kubernetes / Helm
 
-   # Frontend (release)
-   cd frontend && npm ci && npm run build && npm run start
-   ```
+A chart lives at [`deploy/unleashed-voucher-manager`](./deploy/unleashed-voucher-manager),
+published to `oci://ghcr.io/greyrock-labs/helm`. Non-secret settings go
+under `config:` in `values.yaml` (same keys as the environment variable
+table below); `UNLEASHED_USERNAME`/`UNLEASHED_PASSWORD` are supplied via
+`existingSecret`, the name of a Secret you create yourself with those two
+keys. `WIFI_PASSWORD` is secret-shaped too — either set it as a plain
+`config.WIFI_PASSWORD` value or fold it into the same `existingSecret`,
+whichever fits how the rest of your cluster handles credentials.
 
-5. **Access the interface**
-   - Open your browser to `http://localhost:3000`.
+```bash
+helm install guest-wifi oci://ghcr.io/greyrock-labs/helm/unleashed-voucher-manager \
+  --set config.UNLEASHED_URL="https://unleashed.example.com" \
+  --set config.UNLEASHED_SSID="Guest" \
+  --set config.WIFI_SSID="Guest" \
+  --set existingSecret="unleashed-voucher-manager-credentials"
+```
 
-## ⚙️ Configuration
+## Custom SVG logo
 
-### Getting UniFi API Credentials
+- Docker: mount your SVG at `/app/frontend/public/logo.svg` (see the
+  commented-out volume in `compose.yaml`). The mount path, including the
+  filename, cannot be changed.
+- Without Docker: place it at `frontend/public/logo.svg`.
+- Set `IS_LOGO_INVERTIBLE=true` if your logo should be color-inverted in
+  dark mode (e.g. a dark logo on a transparent background).
 
-1. **Access your UniFi Controller**
-2. **Navigate to Settings -> Control Plane -> Integration**
-3. **Create a new API key** by giving it a name and an expiration.
-4. **Find your Site ID** in the controller URL or on [unifi.ui.com](https://unifi.ui.com)
+## Configuration
 
-### Rolling Vouchers and Kiosk Page
+Backend-required variables are marked accordingly; everything else has a
+working default.
 
-Rolling vouchers provide a seamless way to automatically generate guest network access codes. When one voucher is used, a new one is automatically created for the next guest.
-
-> [!IMPORTANT]
-> **Setup Required**
->
-> For rolling vouchers to work properly, you **must** configure your UniFi Hotspot:
->
-> 1. Go to your UniFi Controller -> Insights -> Hotspot
-> 2. Set the **Success Landing Page** to: `https://your-uvm-domain.com/welcome`, the `/welcome` page of UVM
->
-> Without this configuration, vouchers **will not** automatically roll when guests connect.
-
-> [!CAUTION]
-> To restrict UVM access to the guest subnetwork users while still allowing access to `/welcome` page, set the `GUEST_SUBNETWORK` environment variable. This makes sure guests do not have access to other UVM pages, such as the voucher management interface (the root `/` page).
->
-> Without this configuration, guests **will be able** to access the voucher management interface of UVM. This means they will be able to both create and delete vouchers by themselves.
-
-#### How Rolling Vouchers Work
-
-1. **Initial Setup**: Rolling vouchers are generated automatically when needed
-2. **Guest Connection**: When a guest connects to your network, they're redirected to the `/welcome` page
-3. **Automatic Rolling**: The welcome page triggers the creation of a new voucher for the next guest
-   - Rolling vouchers are created with special naming conventions to distinguish them from manually created vouchers, making them easy to identify in your voucher management interface
-4. **IP-Based Uniqueness**: Each IP address can only generate one voucher per session (prevents abuse from page reloads)
-5. **Daily Maintenance**: To prevent clutter, expired rolling vouchers are automatically deleted at midnight (based on your configured `TIMEZONE` in [Environment Variables](#environment-variables))
-
-### Custom SVG Logo
-
-To display your own custom logo:
-
-- If you are using docker, simply mount the SVG file in the container at `/app/frontend/public/logo.svg`. An example is in `./compose.yaml`.
-  - The mount destination (including the file name) **CANNOT BE CHANGED**.
-- If you are **not** using docker, place the SVG file in `./frontend/public/logo.svg`.
-  - The path to the logo (including the file name) **CANNOT BE CHANGED**.
-
-### Environment Variables
-
-Make sure to configure the required variables. The optional variables generally have default values that you should not have to change.
-
-> [!TIP]
->
-> - To configure the WiFi QR code, you are required to configure the `WIFI_SSID` and `WIFI_PASSWORD` variables.
-> - For proper timezone, make sure to set the `TIMEZONE` variable.
+| Variable | Default | Description |
+|---|---|---|
+| `UNLEASHED_URL` | — (**required**) | Base URL of the Unleashed controller's web UI, with scheme. Example: `https://unleashed.example.com` or `https://192.168.1.1:9080`. |
+| `UNLEASHED_USERNAME` | — (**required**) | Login for a Guest Pass Manager account on the controller. Does not need admin rights (and admin rights wouldn't grant delete either — see constraint #1). |
+| `UNLEASHED_PASSWORD` | — (**required**) | Password for that account. |
+| `UNLEASHED_SSID` | — (**required**) | The guest SSID name to associate created passes with. |
+| `UNLEASHED_HAS_VALID_CERT` | `true` | Set to `false` if the controller uses a self-signed certificate (common when connecting directly to its IP instead of through a reverse proxy). Getting this wrong will prevent all controller communication. |
+| `TIMEZONE` | `UTC` | [IANA timezone identifier](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones), e.g. `America/New_York`. Governs `DAILY_ROLL_HOUR` and all displayed times. |
+| `DAILY_ROLL_HOUR` | `4` | Local hour (0–23) at which the next daily pass is minted. See "How the current period is determined" above. |
+| `DAILY_DURATION_HOURS` | `24` | Whole hours of access the daily pass grants once activated. Minimum 1. |
+| `DAILY_SHARE_NUMBER` | `0` | Devices allowed to share the daily code. **`0` = unlimited (default); `1` admits exactly one device and locks out every other guest** — see constraint #3 above. |
+| `WIFI_SSID` | unset | SSID encoded into the WiFi QR code on `/display`. Required (with `WIFI_PASSWORD`) for the QR to render. |
+| `WIFI_PASSWORD` | unset | Password encoded into the WiFi QR code. Use an empty string `""` for an open network with no password — **omitting the variable entirely, rather than setting it to `""`, is what silently disables the QR code** (the frontend needs to know a password was deliberately left blank vs. never configured). |
+| `WIFI_TYPE` | `WPA` if password set, else `nopass` | `WPA`, `WEP`, or `nopass`. |
+| `WIFI_HIDDEN` | `false` | Whether the SSID is broadcast or hidden. |
+| `IS_LOGO_INVERTIBLE` | `false` | Whether the custom logo should be inverted in dark mode. |
+| `BACKEND_BIND_HOST` | `127.0.0.1` | Address the Rust backend binds to. Only matters if you're not using the bundled Docker image. |
+| `BACKEND_BIND_PORT` | `8080` | Port the Rust backend binds to. |
+| `BACKEND_LOG_LEVEL` | `info` | `trace`\|`debug`\|`info`\|`warn`\|`error`. |
+| `FRONTEND_BIND_HOST` | `0.0.0.0` (in the image) | Address the Next.js frontend binds to. |
+| `FRONTEND_BIND_PORT` | `3000` (in the image) | Port the Next.js frontend binds to; this is the port you expose/publish. |
+| `FRONTEND_TO_BACKEND_URL` | `http://127.0.0.1` | How the frontend reaches the backend internally. Only relevant if you split frontend and backend across hosts/containers, which the bundled image does not do. |
 
 > [!IMPORTANT]
-> Make sure to expand this section and read what the environment variables are doing. Some variables are **required**, they are placed at the top of the list.
+> `WIFI_SSID` and `WIFI_PASSWORD` must both be set for the QR code to
+> appear. If either is missing, the QR code silently does not render —
+> `/display` still shows the code and expiry text, just no QR — and the
+> only trace is a `console.warn` in the browser devtools. There is no
+> visible error on the page itself, so if your QR code isn't showing up,
+> check these two variables first.
 
-- **`UNIFI_CONTROLLER_URL`: `string`** (_Required_)
-  - **Description**: URL to your UniFi controller with protocol (`http://` or `https://`).
-  - **Example**: `https://unifi.example.com` or `https://192.168.8.1:443`
-- **`UNIFI_API_KEY`: `string`** (_Required_)
-  - **Description**: API Key for your UniFi controller.
-  - **Example**: `abc123...`
+## API
 
-> [!WARNING]
-> Improperly setting the `UNIFI_HAS_VALID_CERT` variable **will** prevent UVM from communicating with the UniFi controller.
+| Route | Method | Notes |
+|---|---|---|
+| `/api/passes` | `GET` | List all guest passes (optionally filter client-side by name in the UI). |
+| `/api/passes` | `POST` | Create a pass: `{ name, durationHours, shareNumber }`. |
+| `/api/passes/daily` | `GET` | Today's pass. `404` if none can be resolved at all. |
+| `/api/health` | `GET` | See below. |
 
-- **`UNIFI_HAS_VALID_CERT`: `bool`** (_Optional_)
-  - **Description**: Whether your UniFi controller uses a valid SSL certificate. This should normally be set to `true`, especially if you access the controller through a reverse proxy or another setup that provides trusted certificates (e.g., Let's Encrypt). **If you connect directly to the controller’s IP address (which usually serves a self-signed certificate), you may need to set this to `false`.**
-  - **Example**: `true` (default)
-- **`UNIFI_SITE_ID`: `string`** (_Optional_)
-  - **Description**: Site ID of your UniFi controller. Using the value `default`, the backend will try to fetch the ID of the default site.
-  - **Example**: `default` (default)
+`/api/health` **deliberately always returns HTTP 200**, even when the
+Unleashed controller is completely unreachable. Restarting this app cannot
+fix an upstream controller outage, so failing liveness/readiness on it
+would just turn a controller outage into a crash-loop or pull the whole
+app out of service — making a partial outage total. Instead, the body
+reports the truth:
 
-> [!CAUTION]
-> To restrict UVM access to the guest subnetwork users while still allowing access to `/welcome` page, set the `GUEST_SUBNETWORK` variable. This makes sure guests do not have access to other UVM pages, such as the voucher management interface (the root `/` page).
->
-> Without this configuration, guests **will be able** to access the voucher management interface of UVM. This means they will be able to both create and delete vouchers by themselves.
+```json
+{ "status": "degraded", "dailyPassCurrent": false, "controllerReachable": false }
+```
 
-- **`GUEST_SUBNETWORK`: `IPv4 CIDR`** (_Optional_)
-  - **Description**: Restrict guest subnetwork access to UVM while still permitting access to the `/welcome` page, which users are redirected to from the UniFi captive portal. For more details, see [Rolling Vouchers and Kiosk Page](#rolling-vouchers-and-kiosk-page).
-  - **Example**: `10.0.5.0/24`
-- **`FRONTEND_BIND_HOST`: `IPv4`** (_Optional_)
-  - **Description**: Address on which the frontend server binds.
-  - **Example**: `0.0.0.0` (default)
-- **`FRONTEND_BIND_PORT`: `u16`** (_Optional_)
-  - **Description**: Port on which the frontend server binds.
-  - **Example**: `3000` (default)
-- **`FRONTEND_TO_BACKEND_URL`: `URL`** (_Optional_)
-  - **Description**: URL where the frontend will make its API requests to the backend.
-  - **Example**: `http://127.0.0.1` (default)
-- **`BACKEND_BIND_HOST`: `IPv4`** (_Optional_)
-  - **Description**: Address on which the server binds.
-  - **Example**: `127.0.0.1` (default)
-- **`BACKEND_BIND_PORT`: `u16`** (_Optional_)
-  - **Description**: Port on which the backend server binds.
-  - **Example**: `8080` (default)
-- **`BACKEND_LOG_LEVEL`: `trace|debug|info|warn|error`** (_Optional_)
-  - **Description**: Log level of the Rust backend.
-  - **Example**: `info`(default)
-- **`TIMEZONE`: [`timezone identifier`](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List)** (_Optional_)
-  - **Description**: [Timezone identifier](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List) used to format dates and time.
-  - **Example**: `UTC` (default)
-- **`ROLLING_VOUCHER_DURATION_MINUTES`: `minutes`** (_Optional_)
-  - **Description**: Number of minutes a rolling voucher will be valid for once activated.
-  - **Example**: `480` (default)
-- **`PURGE_ALL_EXPIRED_VOUCHERS`: `bool`** (_Optional_)
-  - **Description**: When `true`, periodically purge all expired vouchers. When `false`, periodically only purge expired rolling vouchers.
-  - **Example**: `false` (default)
-- **`WIFI_SSID`: `string`** (_Optional_)
-  - **Description**: WiFi SSID used for the QR code. (required for QR code to be generated)
-  - **Example**: `My WiFi SSID`
-- **`WIFI_PASSWORD`: `string`** (_Optional_)
-  - **Description**: WiFi password used for the QR code. If the WiFi network does not have a password, set to an empty string `""`. (required for QR code to be generated)
-  - **Example**: `My WiFi Password`
-- **`WIFI_TYPE`: `WPA|WEP|nopass`** (_Optional_)
-  - **Description**: WiFi security type used. Defaults to `WPA` if a password is provided and `nopass` otherwise.
-  - **Example**: `WPA`
-- **`WIFI_HIDDEN`: `bool`** (_Optional_)
-  - **Description**: Whether the WiFi SSID is hidden or broadcasted.
-  - **Example**: `false` (default)
-- **`IS_LOGO_INVERTIBLE`: `bool`** (_Optional_)
-  - **Description**: Whether the logo can/should be inverted in dark mode.
-  - **Example**: `false` (default)
-- **`PRINT_CONFIG`: `JSON object`** (_Optional_)
-  - **Description**: Controls which fields are included when printing vouchers. Any omitted fields default to `true`. Keep in mind the string must contain valid JSON.
-  - **Example**: `{"showLogo":true,"showDuration":true,"showMaxGuests":true,"showDataUsageLimit":true,"showRxRateLimit":true,"showTxRateLimit":true,"showId":true,"showPrintTime":true}` (default)
+**If you want a probe that actually fails when the controller is down**,
+point it at `GET /api/passes/daily` instead — that one returns a real
+non-2xx status when it can't resolve a pass.
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
-### Common Issues
+- **Old passes piling up in the controller's guest list.** Expected — see
+  constraint #1. Prune them from the Unleashed admin UI directly; this app
+  cannot delete.
+- **Yesterday's code still works after today's was minted.** Expected — see
+  constraint #2. Unused codes are claimable for 7 days regardless of newer
+  codes being created.
+- **One guest connects and then nobody else can use the code.** Check
+  `DAILY_SHARE_NUMBER` — it's probably set to `1`. Use `0` for unlimited.
+- **WiFi QR code isn't showing on `/display`.** Confirm both `WIFI_SSID`
+  and `WIFI_PASSWORD` are set (an empty string is fine for `WIFI_PASSWORD`
+  on an open network, but the variable must exist). Check the browser
+  console for a warning.
+- **Backend can't reach the controller / `AD_PrivilegeInsufficient` on
+  create.** Verify `UNLEASHED_URL`, `UNLEASHED_HAS_VALID_CERT`, and that
+  the account is a Guest Pass Manager with guest-pass creation rights on
+  the target SSID. Increase `BACKEND_LOG_LEVEL=debug` for more detail.
+- **Health check says "degraded".** The controller is unreachable from the
+  backend's perspective — check network/DNS/firewall between this app and
+  `UNLEASHED_URL`. The app itself is still up and serving the last-known
+  pass.
 
-- **Vouchers not appearing or connection issue to UniFi controller**
-  - Verify `UNIFI_CONTROLLER_URL` is correct and accessible
-  - Verify `UNIFI_SITE_ID` matches your controller's site
-  - Verify `UNIFI_HAS_VALID_CERT` is correct (depending on whether your `UNIFI_CONTROLLER_URL` has a valid SSL certificate or not)
-  - Check if the UniFi controller is running and reachable (DNS issues?)
-  - Ensure API key is valid
-  - Ensure the site has the hotspot/guest portal enabled
-- **Application won't start**
-  - Check all environment variables are set
-  - Verify Docker container has network access to UniFi controller
-  - Check logs: `docker logs unifi-voucher-manager`
-- **The WiFi QR code button is disabled**
-  - Check the [Environment Variables](#environment-variables) section and make sure you configured the variables required for the WiFi QR code
-  - Check the browser console for variable configuration errors (generally by hitting `F12` and going to the 'console' tab)
+## Attribution
 
-### Getting Help
+This project is a rewrite of
+[etiennecollin/unifi-voucher-manager](https://github.com/etiennecollin/unifi-voucher-manager)
+retargeted from UniFi controllers to Ruckus Unleashed. The Unleashed
+guest-pass protocol was worked out with reference to
+[fmuffat/FetchPass](https://github.com/fmuffat/FetchPass) and
+[ms264556/aioruckus](https://github.com/ms264556/aioruckus). See
+[NOTICE](./NOTICE) for full license attribution and [LICENSE](./LICENSE)
+for this project's MIT license (unchanged from upstream).
 
-- Check the [Issues](https://github.com/etiennecollin/unifi-voucher-manager/issues) page
-- Create a new issue with detailed information about your problem
-- Include relevant logs and environment details (redact sensitive information)
-  - Run the container/backend with `BACKEND_LOG_LEVEL="debug"`
-  - Include Docker logs: `docker logs unifi-voucher-manager`
-  - Include browser logs: generally by hitting `F12` and going to the 'console' tab of your browser
-
----
-
-**⭐ If this project helped you, please consider giving it a star!**
-
-Disclaimer: This is an independent, unofficial project. It is not affiliated with, endorsed by, or sponsored by Ubiquiti Inc. UniFi, Ubiquiti, and all associated trademarks, logos, and intellectual property are the property of Ubiquiti Inc. Their use in this project is for identification and compatibility purposes only.
+This is an independent, unofficial project. It is not affiliated with,
+endorsed by, or sponsored by CommScope, RUCKUS Networks, or Ubiquiti Inc.
+Ruckus, Unleashed, UniFi, Ubiquiti, and all associated trademarks, logos,
+and intellectual property are the property of their respective owners.
+Their use here is for identification and interoperability purposes only.

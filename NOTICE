@@ -1,0 +1,10 @@
+This project is derived from unifi-voucher-manager
+(https://github.com/etiennecollin/unifi-voucher-manager), Copyright (c)
+Etienne Collin, used under the MIT License. See LICENSE.
+
+The Ruckus Unleashed protocol implementation was informed by:
+  - FetchPass (https://github.com/fmuffat/FetchPass), MIT
+  - aioruckus (https://github.com/ms264556/aioruckus), 0BSD
+
+This is an independent, unofficial project, not affiliated with,
+endorsed by, or sponsored by CommScope, RUCKUS Networks, or Ubiquiti Inc.
