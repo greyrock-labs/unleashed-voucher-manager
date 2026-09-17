@@ -61,7 +61,7 @@ export default function DisplayPage() {
   }
 
   return (
-    <main className="flex min-h-screen min-h-dvh flex-col items-center justify-center gap-12 bg-page p-8 text-center">
+    <main className="flex min-h-screen min-h-dvh flex-col items-center justify-center gap-6 bg-page p-6 text-center sm:gap-8 sm:p-8">
       <h1 className="text-2xl font-light text-secondary sm:text-3xl">
         Guest WiFi
       </h1>
