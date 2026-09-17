@@ -1,2 +1,11 @@
+# Dead configuration, deliberately kept dead: this file is never COPY'd into
+# the Docker image, so the shipped binary is built without it.
+#
+# It must stay that way. `target-cpu=native` bakes in whatever ISA extensions
+# the machine doing the build happens to have. A CI runner or workstation
+# newer than the cluster nodes would produce a binary that SIGILLs on the
+# first instruction the node does not implement -- a crash with no log line
+# and no obvious cause. Only enable this for a local build you will run on
+# the same machine.
 [build]
 rustflags = ["-C", "target-cpu=native"]

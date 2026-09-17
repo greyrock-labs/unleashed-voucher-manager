@@ -9,15 +9,15 @@ FROM rust:1.97-alpine AS rust-base
 # ==============================================================================
 FROM rust-base AS rust-deps
 
-RUN apk add --no-cache musl-dev pkgconfig openssl-dev openssl-libs-static
+# No openssl: the lockfile resolves TLS through rustls only. ca-certificates
+# in the runtime stage is still required -- rustls-native-certs reads it.
+RUN apk add --no-cache musl-dev
 
 WORKDIR /app
 
 COPY ./backend/Cargo.toml ./backend/Cargo.lock ./
 # Create dummy src to satisfy cargo
 RUN mkdir ./src && echo "fn main() {}" > ./src/main.rs
-
-ENV OPENSSL_STATIC=1
 
 # Build dependencies only (cache them)
 RUN cargo build --release && rm -rf ./src/
