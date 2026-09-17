@@ -5,6 +5,49 @@ image:
 
 replicaCount: 1
 
+# Object naming. Empty means the chart name is used, and the release name is
+# prefixed only when it does not already contain it -- so a Flux HelmRelease
+# named `unleashed-voucher-manager` yields objects called
+# `unleashed-voucher-manager`, not the name doubled.
+nameOverride: ""
+fullnameOverride: ""
+
+# Annotations on the Deployment object itself.
+annotations: {}
+
+# Annotations on the pod template. Anything that has to restart pods on a
+# Secret change belongs here rather than on the Deployment, e.g.
+#   reloader.stakater.com/auto: "true"
+# which matters when UNLEASHED_USERNAME/PASSWORD arrive via `existingSecret`
+# backed by an ExternalSecret: without a restart the pod keeps using the old
+# credential, and the app fails authentication silently rather than crashing.
+podAnnotations: {}
+
+# Pod-level securityContext, e.g. runAsNonRoot / runAsUser / runAsGroup /
+# fsGroup. The image already runs as appuser (uid/gid 1001), so this is here
+# to satisfy cluster policy rather than to change behaviour.
+podSecurityContext: {}
+
+# Container-level securityContext, e.g. allowPrivilegeEscalation: false and
+# capabilities.drop: [ALL]. Do NOT set readOnlyRootFilesystem here -- use the
+# block below, which also provisions the writable paths the app needs. The
+# chart fails the render if you set it here, rather than letting it break at
+# runtime.
+securityContext: {}
+
+# Run with a read-only root filesystem.
+#
+# Enabling this sets readOnlyRootFilesystem on the containers AND mounts the
+# three paths the app writes to, because a read-only root alone would break
+# it at startup:
+#   * /app/frontend/public  -- the entrypoint writes runtime-config.json here
+#     on every start. An empty volume would mask the logo and favicon baked
+#     into the image, so an init container from the same image seeds it first.
+#   * /app/frontend/.next/cache -- Next.js writes its image/fetch cache here.
+#   * /tmp
+readOnlyRootFilesystem:
+  enabled: false
+
 service:
   type: ClusterIP
   port: 3000

@@ -4,6 +4,10 @@ metadata:
   name: {{ include "unleashed-voucher-manager.fullname" . }}
   labels:
     {{- include "unleashed-voucher-manager.labels" . | nindent 4 }}
+  {{- with .Values.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -15,7 +19,45 @@ spec:
       labels:
         app.kubernetes.io/name: {{ include "unleashed-voucher-manager.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
+      {{- /*
+        readOnlyRootFilesystem is a flag rather than a plain securityContext
+        key because it needs matching volumes to work at all. Setting it
+        directly would render valid YAML that dies on startup.
+      */}}
+      {{- if hasKey (.Values.securityContext | default dict) "readOnlyRootFilesystem" }}
+      {{- fail "set readOnlyRootFilesystem.enabled instead of securityContext.readOnlyRootFilesystem -- the flag also mounts the writable paths the app needs, which a bare securityContext key would not" }}
+      {{- end }}
+      {{- $csc := deepCopy (.Values.securityContext | default dict) }}
+      {{- if .Values.readOnlyRootFilesystem.enabled }}
+      {{- $_ := set $csc "readOnlyRootFilesystem" true }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.readOnlyRootFilesystem.enabled }}
+      initContainers:
+        # Seeds the writable volume with the assets baked into the image --
+        # the logo and favicon copied in at build. Mounting an empty volume
+        # over /app/frontend/public would otherwise hide them. Same image, so
+        # it stays in step with whatever the main container ships.
+        - name: seed-public
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sh", "-c", "cp -a /app/frontend/public/. /work/"]
+          {{- with $csc }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: public
+              mountPath: /work
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -23,6 +65,10 @@ spec:
           ports:
             - name: http
               containerPort: 3000
+          {{- with $csc }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- if and .Values.wifiOpenNetwork (.Values.config).WIFI_PASSWORD }}
           {{- fail "wifiOpenNetwork is true but config.WIFI_PASSWORD is also set -- an open network has no password, so set only one of them" }}
           {{- end }}
@@ -99,6 +145,24 @@ spec:
             failureThreshold: 3
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.readOnlyRootFilesystem.enabled }}
+          volumeMounts:
+            - name: public
+              mountPath: /app/frontend/public
+            - name: next-cache
+              mountPath: /app/frontend/.next/cache
+            - name: tmp
+              mountPath: /tmp
+          {{- end }}
+      {{- if .Values.readOnlyRootFilesystem.enabled }}
+      volumes:
+        - name: public
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

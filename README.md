@@ -211,6 +211,39 @@ helm install guest-wifi oci://ghcr.io/greyrock-labs/helm/unleashed-voucher-manag
   --set existingSecret="unleashed-voucher-manager-credentials"
 ```
 
+**Object naming.** Objects are named `<release>-<chart>`, except that the
+release name is not prefixed when it already contains the chart name. A Flux
+`HelmRelease` named `unleashed-voucher-manager` therefore produces a Service
+called `unleashed-voucher-manager`, not the name doubled. `nameOverride` and
+`fullnameOverride` work as in any standard chart.
+
+**Restarting on credential rotation.** If `existingSecret` is maintained by
+something that rotates it (an ExternalSecret, say), the pod keeps using the
+credential it started with until it restarts. The app does not crash on a
+stale credential — it fails authentication against the controller, which is
+quieter and easier to miss. Put whatever your cluster uses to trigger a
+restart under `podAnnotations`, for example
+`reloader.stakater.com/auto: "true"` for Stakater Reloader.
+
+**Security context.** `podSecurityContext` and `securityContext` are passed
+through untouched. The image already runs as `appuser` (uid/gid 1001), so a
+non-root baseline needs no special handling.
+
+Running with a read-only root filesystem needs `readOnlyRootFilesystem.enabled:
+true` rather than `securityContext.readOnlyRootFilesystem` — the chart fails
+the render if you set the latter, because the flag also mounts the three paths
+the app writes to. A read-only root on its own would break it at startup:
+
+| Path | Why |
+| --- | --- |
+| `/app/frontend/public` | the entrypoint writes `runtime-config.json` on every start |
+| `/app/frontend/.next/cache` | Next.js image and fetch cache |
+| `/tmp` | general scratch |
+
+`/app/frontend/public` also holds the logo and favicon baked in at build time,
+so an empty volume mounted there would hide them. The chart runs an init
+container from the same image to copy those assets into the volume first.
+
 ## Custom SVG logo
 
 - Docker: mount your SVG at `/app/frontend/public/logo.svg` (see the
