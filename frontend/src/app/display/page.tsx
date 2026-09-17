@@ -6,7 +6,7 @@ import { GuestPass } from "@/types/voucher";
 import { useServerEvents } from "@/hooks/useServerEvents";
 import WifiQr from "@/components/utils/WifiQr";
 import Spinner from "@/components/utils/Spinner";
-import { formatCode, formatDateTime, formatDevices } from "@/utils/format";
+import { formatCode } from "@/utils/format";
 
 /**
  * The three ways this screen can end up with nothing to show a guest:
@@ -79,14 +79,6 @@ export default function DisplayPage() {
               width or the 32px floor. Sized here for a wall-mounted tablet
               or TV. */}
           <WifiQr className="h-64 w-64 sm:h-96 sm:w-96" />
-
-          <div className="text-base text-muted sm:text-lg">
-            <p>Devices allowed: {formatDevices(pass.shareNumber)}</p>
-            <p>
-              {pass.used ? "Expires" : "Must be claimed by"}:{" "}
-              {formatDateTime(pass.expiresAt)}
-            </p>
-          </div>
         </>
       ) : (
         <p className="max-w-md text-xl text-muted sm:text-2xl">
