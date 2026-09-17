@@ -62,14 +62,41 @@ spec:
             - secretRef:
                 name: {{ .Values.existingSecret }}
           {{- end }}
+          {{- /*
+            Both probes target /rust-api/health, the frontend's proxy path to
+            the backend's /api/health. That exercises frontend + proxy +
+            backend in a single request, where the previous `/` only proved
+            Next.js was alive -- a dead backend behind a live frontend passed.
+            It is also the only viable target: the backend binds 127.0.0.1,
+            so kubelet cannot reach port 8080 directly.
+
+            /api/health always answers 200, including while the controller is
+            unreachable, and answers from an in-memory cache rather than
+            waiting on a controller round-trip. So neither probe fails on a
+            controller outage -- failing liveness would crash-loop the pod
+            over something a restart cannot fix, and failing readiness would
+            pull the pod from the Service and take the guest display down.
+            What these probes do catch is the process being wedged or gone.
+
+            Timings are explicit because the k8s defaults (timeoutSeconds: 1)
+            are too tight for a proxied request through Next.js.
+          */}}
           livenessProbe:
             httpGet:
-              path: /
+              path: /rust-api/health
               port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /
+              path: /rust-api/health
               port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}
