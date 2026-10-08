@@ -46,12 +46,12 @@ export default function Header() {
             width={35}
             height={35}
             loading="eager"
-            alt="UniFi Voucher Manager logo"
+            alt="Unleashed Voucher Manager logo"
             className={"shrink-0" + (isLogoInvertible ? " dark:invert" : "")}
           />
           <h1 className="text-xl md:text-2xl font-semibold text-brand">
             <span className="block sm:hidden">UVM</span>
-            <span className="hidden sm:block">UniFi Voucher Manager</span>
+            <span className="hidden sm:block">Unleashed Voucher Manager</span>
           </h1>
         </div>
         <div className="flex-center gap-3">

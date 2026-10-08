@@ -28,23 +28,18 @@ async function call<T>(endpoint: string, opts: RequestInit = {}) {
   return res.json() as Promise<T>;
 }
 
-export const MIN_VOUCHER_DURATION_MINUTES = 1;
-export const MAX_VOUCHER_DURATION_MINUTES = 525_600;
+// The controller only accepts whole hours, days or weeks.
+export const MAX_VOUCHER_DURATION_HOURS = 8_760;
 
+// Unleashed creates at most 100 passes in one batch.
 export const MIN_VOUCHER_COUNT = 1;
-export const MAX_VOUCHER_COUNT = 1000;
+export const MAX_VOUCHER_COUNT = 100;
 
 export const MIN_VOUCHER_GUESTS = 1;
 export const MAX_VOUCHER_GUESTS = 1000;
 
-export const MIN_VOUCHER_DATA_MB = 1;
-export const MAX_VOUCHER_DATA_MB = 1_048_576;
-
-export const MIN_VOUCHER_DOWNLOAD_KBPS = 2;
-export const MAX_VOUCHER_DOWNLOAD_KBPS = 100_000;
-
-export const MIN_VOUCHER_UPLOAD_KBPS = 2;
-export const MAX_VOUCHER_UPLOAD_KBPS = 100_000;
+export const MIN_VOUCHER_KEY_LENGTH = 2;
+export const MAX_VOUCHER_KEY_LENGTH = 16;
 
 export const api = {
   getAllVouchers: () => call<VoucherGetResponse>("/vouchers"),

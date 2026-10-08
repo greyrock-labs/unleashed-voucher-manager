@@ -4,12 +4,7 @@ import "./styles.css";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Voucher } from "@/types/voucher";
-import {
-  formatBytes,
-  formatDuration,
-  formatMaxGuests,
-  formatSpeed,
-} from "@/utils/format";
+import { formatDuration, formatMaxGuests } from "@/utils/format";
 import { useGlobal } from "@/contexts/GlobalContext";
 import { formatCode } from "@/utils/format";
 import Spinner from "@/components/utils/Spinner";
@@ -32,23 +27,6 @@ function VoucherPrintCard({ voucher }: { voucher: Voucher }) {
       label: "Max Guests",
       value: formatMaxGuests(voucher.authorizedGuestLimit),
       enabled: printConfig.showMaxGuests,
-    },
-    {
-      label: "Data Limit",
-      value: voucher.dataUsageLimitMBytes
-        ? formatBytes(voucher.dataUsageLimitMBytes * 1024 * 1024)
-        : "Unlimited",
-      enabled: printConfig.showDataUsageLimit,
-    },
-    {
-      label: "Down Speed",
-      value: formatSpeed(voucher.rxRateLimitKbps),
-      enabled: printConfig.showRxRateLimit,
-    },
-    {
-      label: "Up Speed",
-      value: formatSpeed(voucher.txRateLimitKbps),
-      enabled: printConfig.showTxRateLimit,
     },
   ];
 

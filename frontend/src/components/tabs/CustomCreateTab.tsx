@@ -5,27 +5,31 @@ import { Voucher, VoucherCreateData } from "@/types/voucher";
 import {
   api,
   MAX_VOUCHER_COUNT,
-  MAX_VOUCHER_DATA_MB,
-  MAX_VOUCHER_DOWNLOAD_KBPS,
-  MAX_VOUCHER_DURATION_MINUTES,
+  MAX_VOUCHER_DURATION_HOURS,
   MAX_VOUCHER_GUESTS,
-  MAX_VOUCHER_UPLOAD_KBPS,
+  MAX_VOUCHER_KEY_LENGTH,
   MIN_VOUCHER_COUNT,
-  MIN_VOUCHER_DATA_MB,
-  MIN_VOUCHER_DOWNLOAD_KBPS,
   MIN_VOUCHER_GUESTS,
-  MIN_VOUCHER_UPLOAD_KBPS,
+  MIN_VOUCHER_KEY_LENGTH,
 } from "@/utils/api";
 import { map } from "@/utils/functional";
 import { notify } from "@/utils/notifications";
 import { useCallback, useState, SubmitEvent } from "react";
 
-type TimeUnit = "minutes" | "hours" | "days";
+// The controller only accepts whole hours, days or weeks.
+type TimeUnit = "hours" | "days" | "weeks";
+
+const HOURS_PER_UNIT: Record<TimeUnit, number> = {
+  hours: 1,
+  days: 24,
+  weeks: 168,
+};
 
 export default function CustomCreateTab() {
   const [loading, setLoading] = useState(false);
   const [newVouchers, setNewVouchers] = useState<Voucher[] | null>(null);
-  const [durationUnit, setDurationUnit] = useState<TimeUnit>("minutes");
+  const [durationUnit, setDurationUnit] = useState<TimeUnit>("hours");
+  const [count, setCount] = useState(MIN_VOUCHER_COUNT);
 
   const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
@@ -33,26 +37,25 @@ export default function CustomCreateTab() {
 
     const parseNumber = (x: FormDataEntryValue) =>
       x !== "" ? Number(x) : null;
+    const parseText = (x: FormDataEntryValue) =>
+      String(x).trim() !== "" ? String(x).trim() : null;
 
     const form = e.currentTarget as HTMLFormElement;
     const data = new FormData(form);
 
     const rawDuration = Number(data.get("duration"));
-    const unit = String(data.get("durationUnit") || "minutes") as TimeUnit;
+    const unit = String(data.get("durationUnit") || "hours") as TimeUnit;
 
-    if (!Number.isFinite(rawDuration) || rawDuration <= 0) {
-      notify("Duration must be a positive number", "error");
+    if (!Number.isInteger(rawDuration) || rawDuration <= 0) {
+      notify("Duration must be a whole number above zero", "error");
       setLoading(false);
       return;
     }
 
-    // Convert to minutes
-    const multiplier = unit === "hours" ? 60 : unit === "days" ? 1440 : 1;
-    const durationMinutes = Math.round(rawDuration * multiplier);
-
-    if (durationMinutes > MAX_VOUCHER_DURATION_MINUTES) {
+    const durationHours = rawDuration * HOURS_PER_UNIT[unit];
+    if (durationHours > MAX_VOUCHER_DURATION_HOURS) {
       notify(
-        `Duration too long. Maximum allowed is ${MAX_VOUCHER_DURATION_MINUTES} minutes`,
+        `Duration too long. Maximum allowed is ${MAX_VOUCHER_DURATION_HOURS} hours`,
         "error",
       );
       setLoading(false);
@@ -61,12 +64,11 @@ export default function CustomCreateTab() {
 
     const payload: VoucherCreateData = {
       count: Number(data.get("count")),
-      name: String(data.get("name")),
-      timeLimitMinutes: durationMinutes,
+      name: String(data.get("name") ?? ""),
+      timeLimitMinutes: durationHours * 60,
       authorizedGuestLimit: map(data.get("guests"), parseNumber),
-      dataUsageLimitMBytes: map(data.get("data"), parseNumber),
-      rxRateLimitKbps: map(data.get("download"), parseNumber),
-      txRateLimitKbps: map(data.get("upload"), parseNumber),
+      code: map(data.get("code"), parseText),
+      remarks: map(data.get("remarks"), parseText),
     };
 
     try {
@@ -74,49 +76,57 @@ export default function CustomCreateTab() {
       setNewVouchers(res.vouchers);
       notify(`Successfully created ${res.vouchers.length} vouchers`, "success");
       form.reset();
-    } catch {
-      notify("Failed to create voucher", "error");
+      setCount(MIN_VOUCHER_COUNT);
+    } catch (error: any) {
+      if (error?.status === 409) {
+        notify("That key is already in use", "error");
+      } else if (error?.status === 400) {
+        notify("The controller cannot create that voucher", "error");
+      } else {
+        notify("Failed to create voucher", "error");
+      }
     }
     setLoading(false);
-  };
-
-  const durationMaxForUnit = (u: TimeUnit) => {
-    if (u === "minutes") return MAX_VOUCHER_DURATION_MINUTES;
-    if (u === "hours") return Math.floor(MAX_VOUCHER_DURATION_MINUTES / 60);
-    return Math.floor(MAX_VOUCHER_DURATION_MINUTES / 1440);
   };
 
   const closeModal = useCallback(() => {
     setNewVouchers(null);
   }, []);
 
+  const isBatch = count > 1;
+
   return (
     <div>
       <form onSubmit={handleSubmit} className="card max-w-lg mx-auto space-y-6">
-        {[
-          {
-            label: "Number",
-            name: "count",
-            type: "number",
-            props: {
-              required: true,
-              min: MIN_VOUCHER_COUNT,
-              max: MAX_VOUCHER_COUNT,
-              defaultValue: MIN_VOUCHER_COUNT,
-            },
-          },
-          {
-            label: "Name",
-            name: "name",
-            type: "text",
-            props: { required: true, defaultValue: "Custom Voucher" },
-          },
-        ].map(({ label, name, type, props }) => (
-          <div key={name}>
-            <label className="block font-medium mb-1">{label}</label>
-            <input name={name} type={type} {...(props as any)} />
-          </div>
-        ))}
+        <div>
+          <label className="block font-medium mb-1">Number</label>
+          <input
+            name="count"
+            type="number"
+            required
+            min={MIN_VOUCHER_COUNT}
+            max={MAX_VOUCHER_COUNT}
+            value={count}
+            onChange={(e) => setCount(Number(e.target.value) || 0)}
+          />
+        </div>
+
+        <div>
+          <label className="block font-medium mb-1">Name</label>
+          <input
+            name="name"
+            type="text"
+            required={!isBatch}
+            disabled={isBatch}
+            defaultValue="Custom Voucher"
+          />
+          {isBatch && (
+            <p className="text-sm text-secondary mt-1">
+              The controller names batch vouchers itself (Guest-1, Guest-2,
+              ...).
+            </p>
+          )}
+        </div>
 
         <div>
           <label className="block font-medium mb-1">Duration</label>
@@ -126,77 +136,55 @@ export default function CustomCreateTab() {
               type="number"
               required
               min={1}
-              max={durationMaxForUnit(durationUnit)}
-              defaultValue={
-                durationUnit === "minutes"
-                  ? 1440
-                  : durationUnit === "hours"
-                    ? 24
-                    : 1
-              }
+              step={1}
+              max={Math.floor(
+                MAX_VOUCHER_DURATION_HOURS / HOURS_PER_UNIT[durationUnit],
+              )}
+              defaultValue={24}
             />
             <select
               name="durationUnit"
-              onChange={(e) =>
-                setDurationUnit(e.target.value as "minutes" | "hours" | "days")
-              }
+              onChange={(e) => setDurationUnit(e.target.value as TimeUnit)}
               className="w-auto"
-              defaultValue="minutes"
+              defaultValue="hours"
             >
-              <option value="minutes">Minutes</option>
               <option value="hours">Hours</option>
               <option value="days">Days</option>
+              <option value="weeks">Weeks</option>
             </select>
           </div>
         </div>
 
-        {[
-          {
-            label: "Guest Limit",
-            name: "guests",
-            type: "number",
-            props: {
-              min: MIN_VOUCHER_GUESTS,
-              max: MAX_VOUCHER_GUESTS,
-              placeholder: "Unlimited",
-            },
-          },
-          {
-            label: "Data Limit (MB)",
-            name: "data",
-            type: "number",
-            props: {
-              min: MIN_VOUCHER_DATA_MB,
-              max: MAX_VOUCHER_DATA_MB,
-              placeholder: "Unlimited",
-            },
-          },
-          {
-            label: "Download Kbps",
-            name: "download",
-            type: "number",
-            props: {
-              min: MIN_VOUCHER_DOWNLOAD_KBPS,
-              max: MAX_VOUCHER_DOWNLOAD_KBPS,
-              placeholder: "Unlimited",
-            },
-          },
-          {
-            label: "Upload Kbps",
-            name: "upload",
-            type: "number",
-            props: {
-              min: MIN_VOUCHER_UPLOAD_KBPS,
-              max: MAX_VOUCHER_UPLOAD_KBPS,
-              placeholder: "Unlimited",
-            },
-          },
-        ].map(({ label, name, type, props }) => (
-          <div key={name}>
-            <label className="block font-medium mb-1">{label}</label>
-            <input name={name} type={type} {...(props as any)} />
-          </div>
-        ))}
+        <div>
+          <label className="block font-medium mb-1">Guest Limit</label>
+          <input
+            name="guests"
+            type="number"
+            min={MIN_VOUCHER_GUESTS}
+            max={MAX_VOUCHER_GUESTS}
+            placeholder="Unlimited"
+          />
+        </div>
+
+        <div>
+          <label className="block font-medium mb-1">Key</label>
+          <input
+            name="code"
+            type="text"
+            disabled={isBatch}
+            minLength={MIN_VOUCHER_KEY_LENGTH}
+            maxLength={MAX_VOUCHER_KEY_LENGTH}
+            pattern={"[^\\s#&+\"'<>,]+"}
+            title={`${MIN_VOUCHER_KEY_LENGTH} to ${MAX_VOUCHER_KEY_LENGTH} characters, no spaces or # & + " ' < > ,`}
+            placeholder={isBatch ? "Generated per voucher" : "Generated"}
+          />
+        </div>
+
+        <div>
+          <label className="block font-medium mb-1">Remarks</label>
+          <input name="remarks" type="text" placeholder="None" />
+        </div>
+
         <button type="submit" disabled={loading} className="btn-primary w-full">
           {loading ? "Creating…" : "Create Custom Voucher"}
         </button>

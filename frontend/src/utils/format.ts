@@ -31,25 +31,6 @@ export function formatDuration(m: number | null | undefined) {
   );
 }
 
-export function formatBytes(b: number | null | undefined) {
-  if (!b) return "Unlimited";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let size = b,
-    i = 0;
-  while (size >= 1024 && i < units.length - 1) {
-    size /= 1024;
-    i++;
-  }
-  return `${size.toFixed(size < 10 ? 1 : 0)} ${units[i]}`;
-}
-
-export function formatSpeed(kbps: number | null | undefined) {
-  if (!kbps) return "Unlimited";
-  return kbps >= 1024
-    ? `${(kbps / 1024).toFixed(kbps < 10240 ? 1 : 0)} Mbps`
-    : `${kbps} Kbps`;
-}
-
 export function formatGuestUsage(
   usage: number,
   limit: number | null | undefined,

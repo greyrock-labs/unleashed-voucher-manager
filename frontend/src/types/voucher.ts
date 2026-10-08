@@ -9,22 +9,17 @@ export interface Voucher {
   expiresAt?: string | null;
   expired: boolean;
   timeLimitMinutes: number;
-  dataUsageLimitMBytes?: number | null;
-  rxRateLimitKbps?: number | null;
-  txRateLimitKbps?: number | null;
+  remarks: string;
 }
 
-export interface VoucherCreateData extends Omit<
-  Voucher,
-  | "id"
-  | "createdAt"
-  | "code"
-  | "authorizedGuestCount"
-  | "activatedAt"
-  | "expiresAt"
-  | "expired"
-> {
+export interface VoucherCreateData {
   count: number;
+  name: string;
+  timeLimitMinutes: number;
+  authorizedGuestLimit?: number | null;
+  /** A custom pass key; only allowed when count is 1. */
+  code?: string | null;
+  remarks?: string | null;
 }
 
 export interface VoucherGetResponse {

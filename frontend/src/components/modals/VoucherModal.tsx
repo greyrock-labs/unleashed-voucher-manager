@@ -5,10 +5,8 @@ import Spinner from "@/components/utils/Spinner";
 import { api } from "@/utils/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  formatBytes,
   formatDuration,
   formatGuestUsage,
-  formatSpeed,
   formatStatus,
 } from "@/utils/format";
 import VoucherCode from "@/components/utils/VoucherCode";
@@ -79,14 +77,7 @@ export default function VoucherModal({ voucher, onClose }: Props) {
                     details.authorizedGuestLimit,
                   ),
                 ],
-                [
-                  "Data Limit",
-                  details.dataUsageLimitMBytes
-                    ? formatBytes(details.dataUsageLimitMBytes * 1024 * 1024)
-                    : "Unlimited",
-                ],
-                ["Download Speed", formatSpeed(details.rxRateLimitKbps)],
-                ["Upload Speed", formatSpeed(details.txRateLimitKbps)],
+                ...(details.remarks ? [["Remarks", details.remarks]] : []),
                 ["ID", details.id],
               ] as [string, any][]
             ).map(([label, value]) => (

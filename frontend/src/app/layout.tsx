@@ -3,8 +3,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "UniFi Voucher Manager",
-  description: "Manage WiFi vouchers with ease",
+  title: "Unleashed Voucher Manager",
+  description: "Manage Ruckus Unleashed guest passes with ease",
   authors: [{ name: "etiennecollin", url: "https://etiennecollin.com" }],
   creator: "Etienne Collin",
   robots: {
