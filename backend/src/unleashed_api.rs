@@ -36,7 +36,7 @@ pub fn startup_retry_delay(attempt: u32) -> Duration {
         .map_or(STARTUP_RETRY_MAX, |d| d.min(STARTUP_RETRY_MAX))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ApiConfig {
     pub url: String,
     pub username: String,
@@ -45,6 +45,24 @@ pub struct ApiConfig {
     pub verify_tls: bool,
     pub timezone: Tz,
     pub rolling_voucher_duration_minutes: u64,
+}
+
+impl std::fmt::Debug for ApiConfig {
+    /// Hand-written so the controller password never reaches a log.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ApiConfig")
+            .field("url", &self.url)
+            .field("username", &self.username)
+            .field("password", &"<redacted>")
+            .field("ssid", &self.ssid)
+            .field("verify_tls", &self.verify_tls)
+            .field("timezone", &self.timezone)
+            .field(
+                "rolling_voucher_duration_minutes",
+                &self.rolling_voucher_duration_minutes,
+            )
+            .finish()
+    }
 }
 
 impl ApiConfig {

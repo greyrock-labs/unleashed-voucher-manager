@@ -9,7 +9,7 @@ const DEFAULT_ROLLING_VOUCHER_DURATION_MINUTES: u64 = 480;
 
 pub static ENVIRONMENT: OnceLock<Environment> = OnceLock::new();
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Environment {
     pub unleashed_url: String,
     pub unleashed_username: String,
@@ -21,6 +21,30 @@ pub struct Environment {
     pub purge_all_expired_vouchers: bool,
     pub rolling_voucher_duration_minutes: u64,
     pub timezone: Tz,
+}
+
+impl std::fmt::Debug for Environment {
+    /// Hand-written so the controller password never reaches a log.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Environment")
+            .field("unleashed_url", &self.unleashed_url)
+            .field("unleashed_username", &self.unleashed_username)
+            .field("unleashed_password", &"<redacted>")
+            .field("unleashed_ssid", &self.unleashed_ssid)
+            .field("unleashed_has_valid_cert", &self.unleashed_has_valid_cert)
+            .field("backend_bind_host", &self.backend_bind_host)
+            .field("backend_bind_port", &self.backend_bind_port)
+            .field(
+                "purge_all_expired_vouchers",
+                &self.purge_all_expired_vouchers,
+            )
+            .field(
+                "rolling_voucher_duration_minutes",
+                &self.rolling_voucher_duration_minutes,
+            )
+            .field("timezone", &self.timezone)
+            .finish()
+    }
 }
 
 impl Environment {
