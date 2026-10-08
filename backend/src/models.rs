@@ -20,12 +20,8 @@ pub struct Voucher {
     pub expired: bool,
     #[serde(rename = "timeLimitMinutes")]
     pub time_limit_minutes: u64,
-    #[serde(rename = "dataUsageLimitMBytes")]
-    pub data_usage_limit_mbytes: Option<u64>,
-    #[serde(rename = "rxRateLimitKbps")]
-    pub rx_rate_limit_kbps: Option<u64>,
-    #[serde(rename = "txRateLimitKbps")]
-    pub tx_rate_limit_kbps: Option<u64>,
+    #[serde(default)]
+    pub remarks: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

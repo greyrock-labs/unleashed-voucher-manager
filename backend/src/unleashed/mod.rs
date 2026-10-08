@@ -2,4 +2,5 @@
 
 pub mod create;
 pub mod guest;
+pub mod mapping;
 pub mod session;
