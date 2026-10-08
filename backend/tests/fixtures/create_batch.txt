@@ -1,0 +1,14 @@
+batchEmailData.push('Guest-3|467296|');batchSMSData.push('Guest-3|467296|');batchEmailData.push('Guest-4|797508|');batchSMSData.push('Guest-4|797508|');
+{"result":"OK",
+ "errorMsg":"~~",
+"key":"136467",
+        "fullname":"null",
+        "expiretime":"1791484995",
+        "wlan":"Guest",        
+        "emailaddr":"null",
+        "phonenumber":"null",
+        "newnum":"null",
+        "totalnum":"null",
+        "duration":"null",
+        "duration_unit":"~~",        
+    "ids":"3:4"}

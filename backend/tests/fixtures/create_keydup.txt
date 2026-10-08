@@ -1,0 +1,14 @@
+
+{"result":"KEY_DUPLICATED",
+ "errorMsg":"The key key already exists. Please enter a different key.",
+"key":"RAW134315",
+        "fullname":"raw2-134315",
+        "expiretime":"1791484995",
+        "wlan":"Guest",        
+        "emailaddr":"null",
+        "phonenumber":"null",
+        "newnum":"null",
+        "totalnum":"null",
+        "duration":"null",
+        "duration_unit":"~~",        
+    "ids":""}
