@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{DateTime, Duration, Utc};
 use chrono_tz::Tz;
 use tokio::time::sleep;
 use tracing::{error, info};
@@ -14,15 +14,7 @@ pub async fn run_daily_purge(timezone: Tz, purge_all: bool) {
 
     loop {
         let now = Utc::now().with_timezone(&timezone);
-        let next_midnight = now
-            .date_naive()
-            .succ_opt()
-            .expect("Next day is not representable")
-            .and_hms_opt(0, 0, 0)
-            .expect("Could not get next midnight")
-            .and_local_timezone(timezone)
-            .latest()
-            .expect("Could not convert next midnight time to local timezone");
+        let next_midnight = next_midnight(now);
 
         let delta = next_midnight - now;
         let duration = delta
@@ -50,5 +42,24 @@ pub async fn run_daily_purge(timezone: Tz, purge_all: bool) {
             Ok(response) => info!("Deleted {} {}", response.vouchers_deleted, voucher_desc),
             Err(code) => error!("Failed to delete {}: {}", voucher_desc, code),
         };
+    }
+}
+
+/// The next local midnight after `now`. Where daylight saving skips midnight,
+/// the first valid local time after it; where midnight happens twice, the
+/// first of them.
+pub fn next_midnight(now: DateTime<Tz>) -> DateTime<Tz> {
+    let timezone = now.timezone();
+    let mut local = now
+        .date_naive()
+        .succ_opt()
+        .expect("Next day is not representable")
+        .and_hms_opt(0, 0, 0)
+        .expect("Midnight is a valid time");
+    loop {
+        if let Some(time) = local.and_local_timezone(timezone).earliest() {
+            return time;
+        }
+        local += Duration::minutes(1);
     }
 }
