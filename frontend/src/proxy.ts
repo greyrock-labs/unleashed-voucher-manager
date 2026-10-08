@@ -20,8 +20,10 @@ const guestAllowedPaths = [
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Extract client IP
-  let clientIp = request.headers.get("x-forwarded-for") || "";
+  // Extract client IP: the first entry when proxies appended their own
+  let clientIp = (request.headers.get("x-forwarded-for") || "")
+    .split(",")[0]
+    .trim();
 
   // Strip IPv6 prefix if it's a mapped IPv4
   if (clientIp.startsWith(IPV6_IPV4_MAPPED_PREFIX)) {

@@ -9,15 +9,19 @@ import { api } from "@/utils/api";
 import { formatCode } from "@/utils/format";
 import { useGlobal } from "@/contexts/GlobalContext";
 
+// An unused voucher still counts down on the controller, which removes it
+// when it expires. Re-check regularly so the kiosk never shows a dead code.
+const KIOSK_REFRESH_MS = 60_000;
+
 export default function KioskPage() {
   const [voucher, setVoucher] = useState<Voucher | null>(null);
   const [state, setState] = useState<TriState | null>(null);
   const { wifiConfig, wifiString } = useGlobal();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent: boolean = false) => {
     if (state === "loading") return;
     try {
-      setState("loading");
+      if (!silent) setState("loading");
       await api.getRollingVoucher().then(setVoucher);
       setState("ok");
     } catch (error: any) {
@@ -35,9 +39,14 @@ export default function KioskPage() {
   }, []);
 
   useEffect(() => {
+    const refresh = () => load(true);
     load();
-    window.addEventListener("vouchersUpdated", load);
-    return () => window.removeEventListener("vouchersUpdated", load);
+    const timer = setInterval(refresh, KIOSK_REFRESH_MS);
+    window.addEventListener("vouchersUpdated", refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("vouchersUpdated", refresh);
+    };
   }, [load]);
 
   const renderContent = useCallback(() => {
