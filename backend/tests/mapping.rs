@@ -17,7 +17,7 @@ fn pass(id: &str, name: &str) -> GuestPass {
         valid_time: 3600,
         create_time: NOW,
         start_time: Some(NOW),
-        expire_time: NOW + 3600,
+        expire_time: Some(NOW + 3600),
         used: false,
         client_macs: vec![],
     }
@@ -68,8 +68,9 @@ fn formats_in_the_configured_timezone() {
 #[test]
 fn expiry_is_inclusive() {
     let p = pass("1", "a");
-    assert!(!to_voucher(&p, Tz::UTC, p.expire_time - 1).expired);
-    assert!(to_voucher(&p, Tz::UTC, p.expire_time).expired);
+    let expiry = p.expire_time.unwrap();
+    assert!(!to_voucher(&p, Tz::UTC, expiry - 1).expired);
+    assert!(to_voucher(&p, Tz::UTC, expiry).expired);
 }
 
 #[test]
@@ -96,7 +97,7 @@ fn picks_the_newest_unused_unexpired_rolling_pass() {
             ..pass("3", "[ROLLING]-c-192.0.2.3")
         },
         GuestPass {
-            expire_time: NOW,
+            expire_time: Some(NOW),
             ..pass("4", "[ROLLING]-d-192.0.2.4")
         },
         pass("5", "not rolling"),
@@ -112,7 +113,7 @@ fn no_rolling_pass_when_all_used_or_expired() {
             ..pass("1", "[ROLLING]-a-192.0.2.1")
         },
         GuestPass {
-            expire_time: NOW - 1,
+            expire_time: Some(NOW - 1),
             ..pass("2", "[ROLLING]-b-192.0.2.2")
         },
     ];
@@ -129,8 +130,23 @@ fn matches_rolling_passes_by_whole_ip() {
 #[test]
 fn expired_rolling_passes_do_not_block_an_ip() {
     let passes = vec![GuestPass {
-        expire_time: NOW - 1,
+        expire_time: Some(NOW - 1),
         ..pass("1", "[ROLLING]-20261008133540-192.0.2.1")
     }];
     assert!(!has_live_rolling_for_ip(&passes, "192.0.2.1", NOW));
+}
+
+#[test]
+fn a_pass_without_an_expiry_never_counts_as_expired() {
+    let p = GuestPass {
+        expire_time: None,
+        ..pass("1", "[ROLLING]-20261008165540-192.0.2.1")
+    };
+    let v = to_voucher(&p, Tz::UTC, NOW);
+    assert!(!v.expired);
+    assert_eq!(v.expires_at, None);
+    assert_eq!(
+        current_rolling(std::slice::from_ref(&p), NOW).map(|p| &p.id),
+        Some(&p.id)
+    );
 }

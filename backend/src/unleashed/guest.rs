@@ -15,8 +15,9 @@ pub struct GuestPass {
     pub create_time: i64,
     /// Unix seconds; `None` when the controller left it empty.
     pub start_time: Option<i64>,
-    /// Unix seconds.
-    pub expire_time: i64,
+    /// Unix seconds; `None` when the controller left it empty or zero, which
+    /// must never read as "expired".
+    pub expire_time: Option<i64>,
     pub used: bool,
     pub client_macs: Vec<String>,
 }
@@ -72,7 +73,7 @@ pub fn parse_guest_list(xml: &str) -> Result<Vec<GuestPass>, String> {
                 valid_time: number("valid-time")?.max(0) as u64,
                 create_time: number("create-time")?,
                 start_time,
-                expire_time: number("expire-time")?,
+                expire_time: Some(number("expire-time")?).filter(|t| *t > 0),
                 used: attr("used") == "true",
                 client_macs: n
                     .children()

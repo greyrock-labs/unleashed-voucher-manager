@@ -22,7 +22,7 @@ fn parses_a_used_pass_with_a_client() {
             valid_time: 7_344_000,
             create_time: 1_791_475_860,
             start_time: Some(1_791_475_860),
-            expire_time: 1_798_819_860,
+            expire_time: Some(1_798_819_860),
             used: true,
             client_macs: vec!["00:00:00:00:00:01".into()],
         }
@@ -59,4 +59,12 @@ fn rejects_html() {
 fn rejects_a_non_numeric_time() {
     let xml = r#"<r><guest id="7" create-time="soon" expire-time="2" /></r>"#;
     assert!(parse_guest_list(xml).is_err());
+}
+
+#[test]
+fn empty_or_zero_expire_time_is_none() {
+    let xml = r#"<r><guest id="7" create-time="1" expire-time="" /><guest id="8" create-time="1" expire-time="0" /></r>"#;
+    let passes = parse_guest_list(xml).unwrap();
+    assert_eq!(passes[0].expire_time, None);
+    assert_eq!(passes[1].expire_time, None);
 }

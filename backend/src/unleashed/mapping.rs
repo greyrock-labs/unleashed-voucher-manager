@@ -25,8 +25,9 @@ pub fn is_used(pass: &GuestPass) -> bool {
     pass.used || !pass.client_macs.is_empty()
 }
 
+/// A pass without an expiry time is never expired.
 pub fn is_expired(pass: &GuestPass, now: i64) -> bool {
-    pass.expire_time <= now
+    pass.expire_time.is_some_and(|t| t <= now)
 }
 
 pub fn to_voucher(pass: &GuestPass, timezone: Tz, now: i64) -> Voucher {
@@ -43,7 +44,7 @@ pub fn to_voucher(pass: &GuestPass, timezone: Tz, now: i64) -> Voucher {
         authorized_guest_count: pass.client_macs.len() as u64,
         activated_at: used
             .then(|| format_time(pass.start_time.unwrap_or(pass.create_time), timezone)),
-        expires_at: Some(format_time(pass.expire_time, timezone)),
+        expires_at: pass.expire_time.map(|t| format_time(t, timezone)),
         expired: is_expired(pass, now),
         time_limit_minutes: pass.valid_time / 60,
         remarks: pass.remarks.clone(),
