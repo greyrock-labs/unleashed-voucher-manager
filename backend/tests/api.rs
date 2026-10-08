@@ -388,3 +388,13 @@ async fn names_and_remarks_the_controller_refuses_are_bad_requests() {
     );
     assert!(mock.state.lock().unwrap().create_forms.is_empty());
 }
+
+#[tokio::test]
+async fn rolling_vouchers_are_for_one_device() {
+    let mock = Mock::start().await;
+    let api = api(&mock).await;
+    let voucher = api.create_rolling_voucher().await.unwrap();
+    assert_eq!(voucher.authorized_guest_limit, Some(1));
+    let form = &mock.state.lock().unwrap().create_forms[0];
+    assert_eq!(form["limitnumber"], "1");
+}

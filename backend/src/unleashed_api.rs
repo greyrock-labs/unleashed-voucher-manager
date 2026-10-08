@@ -277,7 +277,8 @@ impl UnleashedAPI {
         let request = VouchersCreateRequest {
             count: 1,
             name: rolling_name(Utc::now().with_timezone(&self.config.timezone)),
-            authorized_guest_limit: None,
+            // One device per rolling voucher: the next guest gets the next one
+            authorized_guest_limit: Some(1),
             time_limit_minutes: self.config.rolling_voucher_duration_minutes,
             code: None,
             remarks: None,

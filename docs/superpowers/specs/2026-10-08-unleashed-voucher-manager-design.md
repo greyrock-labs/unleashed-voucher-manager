@@ -155,6 +155,8 @@ refreshes on server-sent events.
 - Current rolling voucher: newest `[ROLLING]-` pass that is unexpired and
   unused (by `used` and clients, not `start-time`).
 - `ROLLING_VOUCHER_DURATION_MINUTES` (default `480`) is rounded up to hours.
+- Share limit 1: a rolling voucher works on one device, so each guest gets
+  their own and the voucher counts as used as soon as that device joins.
 - For `GUEST_SUBNETWORK`, the guest's address is the last entry of
   `X-Forwarded-For`, the one the reverse proxy in front of the app appended;
   earlier entries come from the client and can be forged. The backend does

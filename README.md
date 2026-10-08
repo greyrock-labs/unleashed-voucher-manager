@@ -124,7 +124,8 @@ How it works:
 3. `/welcome` asks the backend for the next rolling voucher. Only one unused
    rolling voucher ever waits: if one already exists, the backend returns it
    instead of creating another, so reloading the page does not create more.
-4. Rolling vouchers are named `[ROLLING]-<timestamp>`.
+4. Rolling vouchers are named `[ROLLING]-<timestamp>` and work on one device
+   only, so each guest gets their own.
 5. When the guest portal counts a pass's time from when it was issued, an
    unused rolling voucher can expire on the kiosk. The controller then
    removes it, and the kiosk, which re-checks every minute, creates a new
