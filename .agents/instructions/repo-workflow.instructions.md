@@ -15,6 +15,20 @@
   fixing, amend or squash it while it is unreleased rather than stacking
   follow-up commits.
 
+## Keep the documentation current
+
+Every change updates the documentation it affects, in the same commit when
+it is part of that change:
+
+- `README.md` for anything a user configures, sees or troubleshoots.
+- The spec (`docs/superpowers/specs/`) for behaviour, controller facts,
+  architecture, build, release and testing.
+- `.agents/` for how to work on the repository: layout, commands, test
+  conventions, live testing rules, and anything learned the hard way.
+
+A change is not done until its documentation matches the code. When you find
+documentation that is already wrong, fix it.
+
 ## Releases
 
 Every commit that changes code gets a release; a docs-only change does not.
