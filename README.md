@@ -144,7 +144,7 @@ on this.
 ### Custom SVG logo
 
 The header shows `logo.svg`, and the centre of the WiFi QR code shows
-`qr-logo.svg` (the RUCKUS dog by default). Either can be replaced:
+`qr-logo.svg`; both are the RUCKUS dog by default. Either can be replaced:
 
 - With Docker, mount the SVG at `/app/frontend/public/logo.svg` or
   `/app/frontend/public/qr-logo.svg`. There is an example in `compose.yaml`.
