@@ -57,11 +57,7 @@ export function proxy(request: NextRequest) {
       `${backendUrl}:${backendPort}${backendPath}${request.nextUrl.search}`,
     );
 
-    // Forward only the client IP chosen above, so the backend never sees the
-    // forgeable entries
-    const headers = new Headers(request.headers);
-    headers.set("x-forwarded-for", clientIp);
-    return NextResponse.rewrite(backendFullUrl, { request: { headers } });
+    return NextResponse.rewrite(backendFullUrl, { request });
   }
 
   return NextResponse.next();

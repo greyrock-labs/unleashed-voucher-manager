@@ -76,8 +76,8 @@ fn expiry_is_inclusive() {
 #[test]
 fn names_rolling_passes_without_whitespace() {
     let created = Tz::UTC.timestamp_opt(NOW, 0).unwrap();
-    let name = rolling_name(created, "192.0.2.7");
-    assert_eq!(name, "[ROLLING]-20261008165540-192.0.2.7");
+    let name = rolling_name(created);
+    assert_eq!(name, "[ROLLING]-20261008165540");
     assert!(!name.contains(char::is_whitespace));
 }
 

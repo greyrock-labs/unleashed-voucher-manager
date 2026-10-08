@@ -263,11 +263,10 @@ impl UnleashedAPI {
     }
 
     /// The rolling voucher waiting for the next guest: the current one if an
-    /// unused, unexpired rolling voucher exists, otherwise a new one named
-    /// after `ip`. Only one is ever waiting, so reloading /welcome cannot
-    /// mint more, and the kiosk recovers when its voucher gets used without
-    /// /welcome loading.
-    pub async fn create_rolling_voucher(&self, ip: &str) -> Result<Voucher, StatusCode> {
+    /// unused, unexpired rolling voucher exists, otherwise a new one. Only one
+    /// is ever waiting, so reloading /welcome cannot mint more, and the kiosk
+    /// recovers when its voucher gets used without /welcome loading.
+    pub async fn create_rolling_voucher(&self) -> Result<Voucher, StatusCode> {
         let _guard = self.create_lock.lock().await;
         let passes = self.list_passes().await?;
         let now = Self::now();
@@ -277,7 +276,7 @@ impl UnleashedAPI {
         }
         let request = VouchersCreateRequest {
             count: 1,
-            name: rolling_name(Utc::now().with_timezone(&self.config.timezone), ip),
+            name: rolling_name(Utc::now().with_timezone(&self.config.timezone)),
             authorized_guest_limit: None,
             time_limit_minutes: self.config.rolling_voucher_duration_minutes,
             code: None,

@@ -55,8 +55,8 @@ pub fn is_rolling(pass: &GuestPass) -> bool {
     pass.name.starts_with(ROLLING_PREFIX)
 }
 
-pub fn rolling_name(created: DateTime<Tz>, ip: &str) -> String {
-    format!("{ROLLING_PREFIX}{}-{ip}", created.format("%Y%m%d%H%M%S"))
+pub fn rolling_name(created: DateTime<Tz>) -> String {
+    format!("{ROLLING_PREFIX}{}", created.format("%Y%m%d%H%M%S"))
 }
 
 /// The newest rolling pass that is still unused and unexpired.

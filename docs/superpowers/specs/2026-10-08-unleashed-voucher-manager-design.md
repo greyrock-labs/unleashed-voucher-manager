@@ -66,7 +66,7 @@ which keeps the public method set the handlers already call:
 | `get_newest_voucher` | List, max by `create-time` |
 | `get_rolling_voucher` | List, newest pass named `[ROLLING]-…` that is unused and unexpired |
 | `create_voucher(request)` | Single or batch create, then list to return the created passes |
-| `create_rolling_voucher(ip)` | Under the create lock: return the current rolling voucher if one is waiting, otherwise create one named after `ip` |
+| `create_rolling_voucher()` | Under the create lock: return the current rolling voucher if one is waiting, otherwise create one |
 | `delete_vouchers_by_ids(ids)` | One `delobj` with every existing id. Ids must be numeric; anything else is rejected with `400` before it reaches the XML. |
 | `delete_expired_vouchers`, `delete_expired_rolling_vouchers` | List, filter expired, `delobj` |
 
@@ -148,17 +148,17 @@ refreshes on server-sent events.
   more, and the kiosk recovers when its own voucher is used without
   `/welcome` loading, which a per-IP rule would refuse.
 
-- Name: `[ROLLING]-<YYYYmmddHHMMSS>-<ip>` (UVM's `[ROLLING] ` prefix had a
-  space, which Unleashed rejects).
+- Name: `[ROLLING]-<YYYYmmddHHMMSS>` (UVM's `[ROLLING] ` prefix had a space,
+  which Unleashed rejects). UVM also put the guest's address in the name for
+  its per-address rule; with one waiting voucher the address decides
+  nothing, so it is left out.
 - Current rolling voucher: newest `[ROLLING]-` pass that is unexpired and
   unused (by `used` and clients, not `start-time`).
 - `ROLLING_VOUCHER_DURATION_MINUTES` (default `480`) is rounded up to hours.
-- The guest's address is the last entry of `X-Forwarded-For`, the one the
-  reverse proxy in front of the app appended; earlier entries come from the
-  client and can be forged. The frontend proxy picks that entry, uses it for
-  `GUEST_SUBNETWORK`, and forwards only it to the backend, which rejects with
-  `400` anything that is not an IP address. The address only names the
-  voucher.
+- For `GUEST_SUBNETWORK`, the guest's address is the last entry of
+  `X-Forwarded-For`, the one the reverse proxy in front of the app appended;
+  earlier entries come from the client and can be forged. The backend does
+  not need the address.
 - With `countdown-by-issued` on the portal, an unused rolling voucher expires
   and the controller removes it. The kiosk therefore also re-fetches every
   minute, without showing a spinner; when the fetch finds none, it creates
