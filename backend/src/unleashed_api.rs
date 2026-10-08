@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 use chrono::Utc;
 use chrono_tz::Tz;
 use reqwest::StatusCode;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::{
     environment::Environment,
@@ -16,10 +16,7 @@ use crate::{
     unleashed::{
         create::{CreateOutcome, CreateParams, build_form, parse_create_response},
         guest::{GuestPass, parse_guest_list},
-        mapping::{
-            current_rolling, has_live_rolling_for_ip, is_expired, is_rolling, rolling_name,
-            to_voucher,
-        },
+        mapping::{current_rolling, is_expired, is_rolling, rolling_name, to_voucher},
         session::{Session, SessionError},
     },
 };
@@ -231,19 +228,18 @@ impl UnleashedAPI {
         })
     }
 
-    pub async fn check_rolling_voucher_ip(&self, ip: &str) -> Result<bool, StatusCode> {
-        let passes = self.list_passes().await?;
-        Ok(has_live_rolling_for_ip(&passes, ip, Self::now()))
-    }
-
-    /// Mint the next rolling voucher for `ip`. `FORBIDDEN` when that address
-    /// already has a rolling voucher that has not expired.
+    /// The rolling voucher waiting for the next guest: the current one if an
+    /// unused, unexpired rolling voucher exists, otherwise a new one named
+    /// after `ip`. Only one is ever waiting, so reloading /welcome cannot
+    /// mint more, and the kiosk recovers when its voucher gets used without
+    /// /welcome loading.
     pub async fn create_rolling_voucher(&self, ip: &str) -> Result<Voucher, StatusCode> {
         let _guard = self.create_lock.lock().await;
         let passes = self.list_passes().await?;
-        if has_live_rolling_for_ip(&passes, ip, Self::now()) {
-            info!("Rolling voucher already rotated for IP: {ip}");
-            return Err(StatusCode::FORBIDDEN);
+        let now = Self::now();
+        if let Some(current) = current_rolling(&passes, now) {
+            debug!("A rolling voucher is already waiting; returning it");
+            return Ok(to_voucher(current, self.config.timezone, now));
         }
         let request = VouchersCreateRequest {
             count: 1,

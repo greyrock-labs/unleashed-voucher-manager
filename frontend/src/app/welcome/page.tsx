@@ -10,12 +10,10 @@ export default function WelcomePage() {
 
   const rotateVoucher = useCallback(async () => {
     try {
+      // Returns the waiting rolling voucher, creating one only if none waits
       await api.createRollingVoucher();
-    } catch (error: any) {
-      // Error 403 is expected if the user already created a rolling voucher
-      if (error?.status !== 403) {
-        console.error("Failed to create rolling voucher", error);
-      }
+    } catch (error) {
+      console.error("Failed to create rolling voucher", error);
     }
   }, []);
 

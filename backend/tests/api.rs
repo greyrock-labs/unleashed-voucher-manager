@@ -270,8 +270,10 @@ async fn rolling_vouchers_roll() {
         first.id
     );
 
-    assert!(api.check_rolling_voucher_ip("192.0.2.10").await.unwrap());
-    assert!(!api.check_rolling_voucher_ip("192.0.2.1").await.unwrap());
+    // While it waits unused, any further request gets the same voucher back
+    let again = api.create_rolling_voucher("192.0.2.1").await.unwrap();
+    assert_eq!(again.id, first.id);
+    assert_eq!(mock.pass_ids().len(), 1);
 
     // A guest uses the first pass; the next one becomes current.
     {
@@ -320,30 +322,42 @@ async fn concurrent_creates_return_only_their_own_pass() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn one_ip_gets_one_rolling_voucher_even_when_requests_overlap() {
+async fn overlapping_rolling_requests_share_one_voucher() {
     let mock = Mock::start().await;
     mock.state.lock().unwrap().create_delay_ms = 100;
     let api = std::sync::Arc::new(api(&mock).await);
-    let calls: Vec<_> = (0..2)
-        .map(|_| {
+    let calls: Vec<_> = ["192.0.2.5", "192.0.2.6"]
+        .into_iter()
+        .map(|ip| {
             let api = api.clone();
-            tokio::spawn(async move { api.create_rolling_voucher("192.0.2.5").await })
+            tokio::spawn(async move { api.create_rolling_voucher(ip).await })
         })
         .collect();
-    let mut results = Vec::new();
+    let mut ids = Vec::new();
     for call in calls {
-        results.push(call.await.unwrap());
+        ids.push(call.await.unwrap().unwrap().id);
     }
-    assert_eq!(
-        results.iter().filter(|r| r.is_ok()).count(),
-        1,
-        "{results:?}"
-    );
-    assert!(
-        results
-            .iter()
-            .any(|r| matches!(r, Err(StatusCode::FORBIDDEN))),
-        "{results:?}"
-    );
+    assert_eq!(ids[0], ids[1], "both requests should get the same voucher");
     assert_eq!(mock.pass_ids().len(), 1);
+}
+
+#[tokio::test]
+async fn the_kiosk_gets_a_new_voucher_after_its_own_is_used() {
+    let mock = Mock::start().await;
+    let api = api(&mock).await;
+    // The kiosk mints the first rolling voucher under its own address
+    let first = api.create_rolling_voucher("192.0.2.20").await.unwrap();
+    // A guest uses it, but /welcome never loads
+    {
+        let mut s = mock.state.lock().unwrap();
+        let pass = s
+            .passes
+            .iter_mut()
+            .find(|p| p.id.to_string() == first.id)
+            .unwrap();
+        pass.client_macs.push("00:00:00:00:00:09".into());
+    }
+    // The kiosk's next check creates a fresh one instead of being refused
+    let next = api.create_rolling_voucher("192.0.2.20").await.unwrap();
+    assert_ne!(next.id, first.id);
 }

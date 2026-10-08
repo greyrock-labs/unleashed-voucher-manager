@@ -103,10 +103,9 @@ pub async fn create_rolling_voucher_handler(
         let ip = ip.as_str();
         debug!("Client IP from x-forwarded-for: {}", ip);
 
-        // One rolling voucher per IP; the API answers FORBIDDEN otherwise
+        // Returns the waiting rolling voucher, creating one only if none waits
         match client.create_rolling_voucher(ip).await {
             Ok(response) => return Ok(Json(response)),
-            Err(StatusCode::FORBIDDEN) => return Err(StatusCode::FORBIDDEN),
             Err(e) => {
                 error!("Failed to create rolling voucher: {}", e);
                 return Err(e);

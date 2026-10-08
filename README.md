@@ -121,10 +121,11 @@ How it works:
 1. The kiosk page shows the current rolling voucher, creating one if none
    exists.
 2. A guest logs in with it and the captive portal sends them to `/welcome`.
-3. `/welcome` asks the backend to create the next rolling voucher. Each IP
-   address can create one at a time, so reloading the page does not create
-   more.
-4. Rolling vouchers are named `[ROLLING]-<timestamp>-<ip>`.
+3. `/welcome` asks the backend for the next rolling voucher. Only one unused
+   rolling voucher ever waits: if one already exists, the backend returns it
+   instead of creating another, so reloading the page does not create more.
+4. Rolling vouchers are named `[ROLLING]-<timestamp>-<ip>`, after the address
+   that triggered them.
 5. When the guest portal counts a pass's time from when it was issued, an
    unused rolling voucher can expire on the kiosk. The controller then
    removes it, and the kiosk, which re-checks every minute, creates a new
@@ -137,8 +138,8 @@ The app takes the client's address from the **last** entry of
 `X-Forwarded-For`, so the reverse proxy directly in front of it must append
 (or set) the address it received the connection from. Earlier entries come
 from the client and are ignored, because a guest could forge them. Do not
-expose port 3000 to the guest network directly. Both `GUEST_SUBNETWORK` and
-the one-voucher-per-IP rule depend on this.
+expose port 3000 to the guest network directly. `GUEST_SUBNETWORK` depends
+on this.
 
 ### Custom SVG logo
 

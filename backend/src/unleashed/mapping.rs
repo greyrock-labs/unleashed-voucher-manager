@@ -66,11 +66,3 @@ pub fn current_rolling(passes: &[GuestPass], now: i64) -> Option<&GuestPass> {
         .filter(|p| is_rolling(p) && !is_used(p) && !is_expired(p, now))
         .max_by_key(|p| (p.create_time, p.id.parse::<u64>().unwrap_or(0)))
 }
-
-/// Whether `ip` already minted a rolling pass that has not expired.
-pub fn has_live_rolling_for_ip(passes: &[GuestPass], ip: &str, now: i64) -> bool {
-    let suffix = format!("-{ip}");
-    passes
-        .iter()
-        .any(|p| is_rolling(p) && !is_expired(p, now) && p.name.ends_with(&suffix))
-}

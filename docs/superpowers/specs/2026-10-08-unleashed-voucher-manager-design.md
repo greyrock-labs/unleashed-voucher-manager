@@ -66,7 +66,7 @@ which keeps the public method set the handlers already call:
 | `get_newest_voucher` | List, max by `create-time` |
 | `get_rolling_voucher` | List, newest pass named `[ROLLING]-…` that is unused and unexpired |
 | `create_voucher(request)` | Single or batch create, then list to return the created passes |
-| `check_rolling_voucher_ip(ip)`, `create_rolling_voucher(ip)` | As UVM, with the new name prefix |
+| `create_rolling_voucher(ip)` | Under the create lock: return the current rolling voucher if one is waiting, otherwise create one named after `ip` |
 | `delete_vouchers_by_ids(ids)` | One `delobj` with every existing id. Ids must be numeric; anything else is rejected with `400` before it reaches the XML. |
 | `delete_expired_vouchers`, `delete_expired_rolling_vouchers` | List, filter expired, `delobj` |
 
@@ -133,8 +133,14 @@ and `remarks`.
 ### Rolling vouchers
 
 Same flow as UVM: the guest portal redirects to `/welcome`, which asks the
-backend to mint the next rolling voucher for the guest's IP. `/kiosk` shows the
-current one and refreshes on server-sent events.
+backend for the next rolling voucher. `/kiosk` shows the current one and
+refreshes on server-sent events.
+
+- One waiting voucher instead of UVM's one-voucher-per-IP rule: a rolling
+  voucher is created only when no unused, unexpired one exists; otherwise the
+  request returns the waiting one. Reloading `/welcome` therefore cannot mint
+  more, and the kiosk recovers when its own voucher is used without
+  `/welcome` loading, which a per-IP rule would refuse.
 
 - Name: `[ROLLING]-<YYYYmmddHHMMSS>-<ip>` (UVM's `[ROLLING] ` prefix had a
   space, which Unleashed rejects).
@@ -145,7 +151,8 @@ current one and refreshes on server-sent events.
   reverse proxy in front of the app appended; earlier entries come from the
   client and can be forged. The frontend proxy picks that entry, uses it for
   `GUEST_SUBNETWORK`, and forwards only it to the backend, which rejects with
-  `400` anything that is not an IP address.
+  `400` anything that is not an IP address. The address only names the
+  voucher.
 - With `countdown-by-issued` on the portal, an unused rolling voucher expires
   and the controller removes it. The kiosk therefore also re-fetches every
   minute, without showing a spinner; when the fetch finds none, it creates
@@ -231,8 +238,8 @@ Manager role cannot delete. The README explains how to create one.
   for rolling vouchers to roll.
 - The reverse proxy directly in front of the app must append (or set) the
   client's address in `X-Forwarded-For`, and the app's port must not be
-  reachable from the guest network directly. `GUEST_SUBNETWORK` gating and the
-  one-voucher-per-IP rule depend on it.
+  reachable from the guest network directly. `GUEST_SUBNETWORK` gating
+  depends on it.
 - The app must be able to reach the controller over HTTPS.
 
 ## Out of scope

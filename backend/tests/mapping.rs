@@ -1,6 +1,6 @@
 use backend::unleashed::{
     guest::GuestPass,
-    mapping::{current_rolling, has_live_rolling_for_ip, rolling_name, to_voucher},
+    mapping::{current_rolling, rolling_name, to_voucher},
 };
 use chrono::TimeZone;
 use chrono_tz::Tz;
@@ -118,22 +118,6 @@ fn no_rolling_pass_when_all_used_or_expired() {
         },
     ];
     assert!(current_rolling(&passes, NOW).is_none());
-}
-
-#[test]
-fn matches_rolling_passes_by_whole_ip() {
-    let passes = vec![pass("1", "[ROLLING]-20261008133540-11.2.3.4")];
-    assert!(has_live_rolling_for_ip(&passes, "11.2.3.4", NOW));
-    assert!(!has_live_rolling_for_ip(&passes, "1.2.3.4", NOW));
-}
-
-#[test]
-fn expired_rolling_passes_do_not_block_an_ip() {
-    let passes = vec![GuestPass {
-        expire_time: Some(NOW - 1),
-        ..pass("1", "[ROLLING]-20261008133540-192.0.2.1")
-    }];
-    assert!(!has_live_rolling_for_ip(&passes, "192.0.2.1", NOW));
 }
 
 #[test]
