@@ -2,7 +2,8 @@ mod support;
 
 use backend::{
     models::VouchersCreateRequest,
-    unleashed_api::{ApiConfig, UnleashedAPI},
+    unleashed::session::SessionError,
+    unleashed_api::{ApiConfig, UnleashedAPI, startup_retry_delay},
 };
 use reqwest::StatusCode;
 use support::{Mock, PASSWORD, USERNAME};
@@ -45,7 +46,14 @@ async fn startup_fails_on_bad_credentials() {
         rolling_voucher_duration_minutes: 480,
     })
     .await;
-    assert!(result.is_err());
+    assert!(matches!(result, Err(SessionError::Auth(_))));
+}
+
+#[test]
+fn startup_retries_back_off_to_five_minutes() {
+    let delays: Vec<u64> = (0..9).map(|a| startup_retry_delay(a).as_secs()).collect();
+    assert_eq!(delays, vec![5, 10, 20, 40, 80, 160, 300, 300, 300]);
+    assert_eq!(startup_retry_delay(u32::MAX).as_secs(), 300);
 }
 
 #[tokio::test]

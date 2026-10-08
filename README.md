@@ -232,6 +232,9 @@ Required variables come first.
 ## Troubleshooting
 
 - **The backend keeps retrying the connection at startup**
+  - It waits 5 seconds, then twice as long each time, up to 5 minutes. The
+    log says whether the controller refused the credentials or could not be
+    reached.
   - Check `UNLEASHED_URL` is correct and reachable from the container.
   - Check `UNLEASHED_HAS_VALID_CERT` matches the controller's certificate.
   - Check the username and password, and that the role has read-write admin

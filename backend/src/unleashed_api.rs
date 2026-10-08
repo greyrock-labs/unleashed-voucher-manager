@@ -1,7 +1,7 @@
 //! The operations the HTTP handlers need, implemented on Unleashed guest
 //! passes.
 
-use std::{collections::HashSet, sync::OnceLock};
+use std::{collections::HashSet, sync::OnceLock, time::Duration};
 
 use tokio::sync::Mutex;
 
@@ -22,6 +22,19 @@ use crate::{
 };
 
 pub static UNLEASHED_API: OnceLock<UnleashedAPI> = OnceLock::new();
+
+const STARTUP_RETRY_FIRST: Duration = Duration::from_secs(5);
+const STARTUP_RETRY_MAX: Duration = Duration::from_secs(300);
+
+/// How long to wait before startup connection attempt `attempt + 1`: 5
+/// seconds, doubling each time, at most 5 minutes. Retrying slowly rather
+/// than exiting lets a fixed password or a returning controller recover
+/// without a restart, without hammering the controller meanwhile.
+pub fn startup_retry_delay(attempt: u32) -> Duration {
+    STARTUP_RETRY_FIRST
+        .checked_mul(2u32.saturating_pow(attempt))
+        .map_or(STARTUP_RETRY_MAX, |d| d.min(STARTUP_RETRY_MAX))
+}
 
 #[derive(Debug, Clone)]
 pub struct ApiConfig {
@@ -59,15 +72,14 @@ pub struct UnleashedAPI {
 
 impl UnleashedAPI {
     /// Connect and log in, so bad settings fail at startup.
-    pub async fn try_new(config: ApiConfig) -> Result<Self, String> {
+    pub async fn try_new(config: ApiConfig) -> Result<Self, SessionError> {
         let session = Session::new(
             &config.url,
             &config.username,
             &config.password,
             config.verify_tls,
-        )
-        .map_err(|e| e.to_string())?;
-        session.login().await.map_err(|e| e.to_string())?;
+        )?;
+        session.login().await?;
         Ok(Self {
             session,
             config,

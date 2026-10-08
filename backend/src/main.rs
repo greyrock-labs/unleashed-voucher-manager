@@ -11,7 +11,8 @@ use backend::{
     environment::{ENVIRONMENT, Environment},
     handlers::*,
     tasks::run_daily_purge,
-    unleashed_api::{ApiConfig, UNLEASHED_API, UnleashedAPI},
+    unleashed::session::SessionError,
+    unleashed_api::{ApiConfig, UNLEASHED_API, UnleashedAPI, startup_retry_delay},
 };
 
 #[tokio::main]
@@ -46,6 +47,7 @@ async fn main() {
     // =================================
     // Connect to the Unleashed controller
     // =================================
+    let mut attempt = 0;
     loop {
         match UnleashedAPI::try_new(ApiConfig::from_environment(environment)).await {
             Ok(api) => {
@@ -56,9 +58,20 @@ async fn main() {
                 break;
             }
             Err(e) => {
-                error!("Failed to connect to the Unleashed controller: {}", e);
-                warn!("Retrying connection in 5 seconds...");
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                match &e {
+                    SessionError::Auth(_) => error!(
+                        "{e}. Check UNLEASHED_USERNAME and UNLEASHED_PASSWORD, and that the \
+                         user's role has read-write admin privilege."
+                    ),
+                    SessionError::Connect(_) => error!(
+                        "{e}. Check UNLEASHED_URL, UNLEASHED_HAS_VALID_CERT and that the \
+                         controller is reachable."
+                    ),
+                }
+                let delay = startup_retry_delay(attempt);
+                warn!("Retrying in {} seconds...", delay.as_secs());
+                tokio::time::sleep(delay).await;
+                attempt = attempt.saturating_add(1);
             }
         }
     }
