@@ -182,14 +182,22 @@ usually find nothing to delete.
 - **Print:** drop `showDataUsageLimit`, `showRxRateLimit` and
   `showTxRateLimit` from `PRINT_CONFIG`; everything else stays.
 - **Kiosk:** add the once-a-minute re-fetch.
-- **Branding:** UniFi text and logo replaced with neutral Unleashed wording.
-  Custom SVG logo mounting works as in UVM.
+- **Branding:** the RUCKUS dog on a white tile with a black border is the
+  header logo (`public/logo.svg`), the centre of the WiFi QR code
+  (`public/qr-logo.svg`) and the browser and home-screen icons. In dark mode
+  the header logo is inverted with its hue rotated back (`invert` plus
+  `hue-rotate-180`), giving a white dog on a black tile with the orange kept;
+  the QR icon is not inverted, because the QR code turns white on dark and
+  needs the white tile. Either SVG can be replaced by mounting a file.
 - Everything else (Quick Create presets, browse and search, bulk select and
   delete, QR, theme, notifications, SSE, TestTab) is unchanged.
 
 ## Configuration
 
-UVM's variables keep their names and defaults, except:
+UVM's variables keep their names and defaults, except the controller
+variables below and `IS_LOGO_INVERTIBLE`, which defaults to `true` for the
+bundled logo and is parsed as a boolean (environment values arrive as
+strings, and `"false"` is truthy):
 
 | Removed | Added |
 |---|---|
@@ -207,7 +215,8 @@ Manager role cannot delete. The README explains how to create one.
   `github.com/greyrock-labs/unleashed-voucher-manager`.
 - `.forgejo/workflows/ci.yaml` on pull requests and pushes to `main`: backend
   `cargo build --locked` and `cargo test --locked`; frontend `npm ci`,
-  `tsc --noEmit`, `npm run build`.
+  `tsc --noEmit`, `npm test`, `npm run build`. The runner image has Node 24
+  and no Rust, so the workflows install Rust with `dtolnay/rust-toolchain`.
 - `.forgejo/workflows/release.yaml` on `v*` tags: backend tests, then
   `docker-bake.hcl` target `image-all` (linux/amd64 only; the runner has no
   QEMU) pushed to `ghcr.io/greyrock-labs/unleashed-voucher-manager` with
@@ -233,12 +242,32 @@ Manager role cannot delete. The README explains how to create one.
   - rolling voucher selection.
 - **Mock-HTTP session tests:** login with the dashboard step, CSRF header on
   requests, re-login and single retry on `302`, failure on a second `302`.
-- **Frontend:** typecheck and build, as UVM does.
-- **Live check before `v1.0.0`:** run the container locally against the
-  controller; create single, batch and custom-key passes, list, search,
-  delete selected, print, and drive `/welcome` and `/kiosk`. Clean up
-  everything created.
+- **Frontend:** typecheck and build, plus `node --test` unit tests
+  (`src/**/*.test.ts`) for pure helpers such as boolean parsing.
+- **Live check** for changes to how the app talks to the controller: run the
+  container locally against the controller; create single, batch and
+  custom-key passes, list, search, delete selected, print, and drive
+  `/welcome` and `/kiosk`. Clean up everything created. Never test wrong
+  credentials against a real controller: it then refuses logins from that
+  address for a while.
 - CI never talks to a controller.
+
+## Robustness
+
+- **Concurrent creates:** a lock is held from the guest list before a create
+  to the guest list after it, so concurrent creates cannot claim each
+  other's passes, and the rolling voucher check and create run as one step.
+- **Credentials stay out of logs:** login sends the password in the query
+  string, so request URLs never reach logs or error messages, and the
+  configuration's `Debug` output redacts the password.
+- **Startup:** connection attempts are retried after 5 seconds, doubling up
+  to 5 minutes, and the log says whether the controller refused the
+  credentials or could not be reached. Retrying slowly instead of exiting lets
+  a corrected password or a returning controller recover without a restart.
+- **Expiry:** a pass whose `expire-time` is empty or zero never counts as
+  expired, so cleanup never deletes it.
+- **Midnight purge:** where daylight saving skips midnight it runs at the
+  first valid local time; where midnight repeats, at the first one.
 
 ## Deployment requirements
 

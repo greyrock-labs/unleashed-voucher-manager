@@ -1,6 +1,6 @@
 # Unleashed Voucher Manager Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status: implemented in v1.0.0. Do not execute this plan again.** It records how the port was built. Later releases changed some details (rolling voucher rules, character validation, logging, startup retries), so the code and the spec are the current reference.
 
 **Goal:** Port the imported unifi-voucher-manager (UVM) code to Ruckus Unleashed guest passes, keeping UVM's routes, JSON shapes and features.
 
