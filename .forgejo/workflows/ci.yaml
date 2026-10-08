@@ -40,5 +40,8 @@ jobs:
       - name: Typecheck
         run: cd frontend && npx tsc --noEmit
 
+      - name: Run tests
+        run: cd frontend && npm test
+
       - name: Build
         run: cd frontend && npm run build

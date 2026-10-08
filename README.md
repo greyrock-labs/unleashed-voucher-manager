@@ -200,8 +200,10 @@ Required variables come first.
   - Whether the SSID is hidden.
   - Default: `false`
 - **`IS_LOGO_INVERTIBLE`: `bool`** (_Optional_)
-  - Whether the logo may be inverted in dark mode.
-  - Default: `false`
+  - Whether the header logo is inverted in dark mode. The inversion keeps
+    colours, so the bundled logo becomes a white dog on a black tile with
+    orange bars. Set to `false` for a custom logo that should not change.
+  - Default: `true`
 - **`PRINT_CONFIG`: `JSON object`** (_Optional_)
   - Which fields printed vouchers show. Omitted fields default to `true`.
   - Default:
