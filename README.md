@@ -133,12 +133,11 @@ How it works:
    expired vouchers if `PURGE_ALL_EXPIRED_VOUCHERS` is set. Unleashed usually
    removes expired passes itself, so this rarely finds anything.
 
-The app takes the client's address from the **last** entry of
-`X-Forwarded-For`, so the reverse proxy directly in front of it must append
-(or set) the address it received the connection from. Earlier entries come
-from the client and are ignored, because a guest could forge them. Do not
-expose port 3000 to the guest network directly. `GUEST_SUBNETWORK` depends
-on this.
+For `GUEST_SUBNETWORK`, the app takes the client's address from the
+**last** entry of `X-Forwarded-For`, so the reverse proxy directly in front
+of it must append (or set) the address it received the connection from.
+Earlier entries come from the client and are ignored, because a guest could
+forge them. Do not expose port 3000 to the guest network directly.
 
 ### Custom SVG logo
 
@@ -239,8 +238,6 @@ Required variables come first.
     the controller refuses these, and garbles accented letters.
 - **Vouchers do not roll when guests connect**
   - Check the guest WLAN redirects to the app's `/welcome` page.
-  - Check the reverse proxy appends the client's address to
-    `X-Forwarded-For`.
 - **The WiFi QR code button is disabled**
   - Set `WIFI_SSID` and `WIFI_PASSWORD`, and check the browser console for
     configuration errors.
