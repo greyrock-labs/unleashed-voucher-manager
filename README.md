@@ -235,6 +235,10 @@ Required variables come first.
   - It waits 5 seconds, then twice as long each time, up to 5 minutes. The
     log says whether the controller refused the credentials or could not be
     reached.
+  - After a few failed logins, Unleashed refuses further logins from the same
+    address for a while, even with the right password, and shows no alarm
+    for it. If a corrected password is still refused, wait and let the
+    retries pick it up.
   - Check `UNLEASHED_URL` is correct and reachable from the container.
   - Check `UNLEASHED_HAS_VALID_CERT` matches the controller's certificate.
   - Check the username and password, and that the role has read-write admin
