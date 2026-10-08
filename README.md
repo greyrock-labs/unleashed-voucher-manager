@@ -20,7 +20,6 @@ wherever the controller allows.
   - [Rolling vouchers and the kiosk page](#rolling-vouchers-and-the-kiosk-page)
   - [Custom SVG logo](#custom-svg-logo)
   - [Environment variables](#environment-variables)
-- [Differences from UniFi Voucher Manager](#differences-from-unifi-voucher-manager)
 - [Troubleshooting](#troubleshooting)
 - [Credits](#credits)
 
@@ -216,18 +215,6 @@ Required variables come first.
 - **`BACKEND_BIND_PORT`: `u16`** (_Optional_), default `8080`
 - **`BACKEND_LOG_LEVEL`: `trace|debug|info|warn|error`** (_Optional_),
   default `info`
-
-## Differences from UniFi Voucher Manager
-
-- **No data or speed limits per voucher.** Unleashed sets bandwidth per WLAN
-  or role, not per pass.
-- **Durations in whole hours, days or weeks.** The controller cannot create a
-  pass shorter than an hour; other values are rounded up to whole hours.
-- **Batches of up to 100**, named by the controller (`Guest-1`, `Guest-2`,
-  ...).
-- **Custom keys and remarks** can be set when creating a voucher.
-- **Usernames and passwords** instead of an API key, and an SSID instead of a
-  site ID.
 
 ## Troubleshooting
 
