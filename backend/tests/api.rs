@@ -369,3 +369,23 @@ async fn the_kiosk_gets_a_new_voucher_after_its_own_is_used() {
     let next = api.create_rolling_voucher("192.0.2.20").await.unwrap();
     assert_ne!(next.id, first.id);
 }
+
+#[tokio::test]
+async fn names_and_remarks_the_controller_refuses_are_bad_requests() {
+    let mock = Mock::start().await;
+    let api = api(&mock).await;
+    let name = request(1, "Bob's phone");
+    assert_eq!(
+        api.create_voucher(&name).await.unwrap_err(),
+        StatusCode::BAD_REQUEST
+    );
+    let remarks = VouchersCreateRequest {
+        remarks: Some("a<b".into()),
+        ..request(1, "desk")
+    };
+    assert_eq!(
+        api.create_voucher(&remarks).await.unwrap_err(),
+        StatusCode::BAD_REQUEST
+    );
+    assert!(mock.state.lock().unwrap().create_forms.is_empty());
+}

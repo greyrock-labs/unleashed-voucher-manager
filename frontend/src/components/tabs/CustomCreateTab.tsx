@@ -14,6 +14,11 @@ import {
 } from "@/utils/api";
 import { map } from "@/utils/functional";
 import { notify } from "@/utils/notifications";
+import {
+  NAME_REJECTED_CHARS,
+  REMARKS_REJECTED_CHARS,
+  textProblem,
+} from "@/utils/validation";
 import { useCallback, useState, SubmitEvent } from "react";
 
 // The controller only accepts whole hours, days or weeks.
@@ -62,9 +67,21 @@ export default function CustomCreateTab() {
       return;
     }
 
+    const name = String(data.get("name") ?? "");
+    const remarks = String(data.get("remarks") ?? "");
+    const problem =
+      (Number(data.get("count")) === 1 &&
+        textProblem("Name", name, NAME_REJECTED_CHARS)) ||
+      textProblem("Remarks", remarks, REMARKS_REJECTED_CHARS);
+    if (problem) {
+      notify(problem, "error");
+      setLoading(false);
+      return;
+    }
+
     const payload: VoucherCreateData = {
       count: Number(data.get("count")),
-      name: String(data.get("name") ?? ""),
+      name,
       timeLimitMinutes: durationHours * 60,
       authorizedGuestLimit: map(data.get("guests"), parseNumber),
       code: map(data.get("code"), parseText),
@@ -81,7 +98,10 @@ export default function CustomCreateTab() {
       if (error?.status === 409) {
         notify("That key is already in use", "error");
       } else if (error?.status === 400) {
-        notify("The controller cannot create that voucher", "error");
+        notify(
+          "The controller does not accept that voucher's name, key or remarks",
+          "error",
+        );
       } else {
         notify("Failed to create voucher", "error");
       }

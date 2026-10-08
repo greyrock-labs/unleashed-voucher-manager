@@ -169,3 +169,81 @@ fn unknown_results_fail() {
         CreateOutcome::Failed(_)
     ));
 }
+
+#[test]
+fn rejects_name_characters_the_controller_refuses() {
+    // Probed: these make the controller answer OK and create nothing
+    for c in [
+        '\'', '"', '<', '>', '&', '#', ';', '\\', '`', '|', '!', '$', '(', ')',
+    ] {
+        let request = CreateParams {
+            name: format!("Bob{c}s"),
+            ..params()
+        };
+        assert!(build_form(&request).is_err(), "{c:?} should be rejected");
+    }
+}
+
+#[test]
+fn allows_name_punctuation_the_controller_accepts() {
+    let request = CreateParams {
+        name: "a+b,c%d*e=f?g~h^i[j]k{l}m/n:o@p".into(),
+        ..params()
+    };
+    assert!(build_form(&request).is_ok());
+}
+
+#[test]
+fn remarks_only_reject_angle_brackets() {
+    let ok = CreateParams {
+        remarks: Some("Bob's \"phone\" & laptop; #2 (front desk)!".into()),
+        ..params()
+    };
+    assert!(build_form(&ok).is_ok());
+    for bad in ["a<b", "a>b"] {
+        let request = CreateParams {
+            remarks: Some(bad.into()),
+            ..params()
+        };
+        assert!(build_form(&request).is_err(), "{bad:?} should be rejected");
+    }
+}
+
+#[test]
+fn rejects_text_the_controller_would_garble() {
+    // Probed: the controller stores "é" as "Ã©"
+    let name = CreateParams {
+        name: "Café".into(),
+        ..params()
+    };
+    assert!(build_form(&name).is_err());
+    let remarks = CreateParams {
+        remarks: Some("Café".into()),
+        ..params()
+    };
+    assert!(build_form(&remarks).is_err());
+}
+
+#[test]
+fn batch_names_are_not_checked() {
+    // The controller names batch passes itself and ignores the name
+    let request = CreateParams {
+        count: 2,
+        name: "Bob's".into(),
+        ..params()
+    };
+    assert!(build_form(&request).is_ok());
+}
+
+#[test]
+fn reads_an_invalid_characters_response() {
+    let body = std::fs::read_to_string(format!(
+        "{}/tests/fixtures/create_invalid.txt",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    assert_eq!(
+        parse_create_response(&body),
+        CreateOutcome::InvalidCharacters("Invalid Characters detected in {1}.".into())
+    );
+}

@@ -30,7 +30,29 @@ pub enum CreateOutcome {
     /// whitespace also answers `OK` and creates nothing.
     Accepted,
     KeyDuplicated(String),
+    /// The controller refused characters in a field.
+    InvalidCharacters(String),
     Failed(String),
+}
+
+/// Characters the controller refuses in a pass name. It answers OK and
+/// creates nothing for most of them, so they are rejected before sending.
+pub const NAME_REJECTED_CHARS: &str = "'\"<>&#;\\`|!$()";
+
+/// Characters the controller refuses in remarks.
+pub const REMARKS_REJECTED_CHARS: &str = "<>";
+
+/// The controller stores non-ASCII text garbled ("é" becomes "Ã©"), and
+/// refuses some ASCII punctuation, so names and remarks are limited to the
+/// printable ASCII it keeps intact.
+pub fn check_text(field: &str, value: &str, rejected: &str) -> Result<(), String> {
+    if value.chars().any(|c| !(' '..='~').contains(&c)) {
+        return Err(format!("{field} can only contain plain ASCII characters"));
+    }
+    if let Some(c) = value.chars().find(|c| rejected.contains(*c)) {
+        return Err(format!("{field} cannot contain {c:?}"));
+    }
+    Ok(())
 }
 
 /// The controller only accepts whole hours, days or weeks. Round the minutes
@@ -86,8 +108,14 @@ pub fn build_form(params: &CreateParams) -> Result<Vec<(&'static str, String)>, 
         None => String::new(),
     };
     let name = sanitize_name(&params.name);
-    if !batch && name.is_empty() {
-        return Err("name cannot be empty".to_string());
+    if !batch {
+        if name.is_empty() {
+            return Err("name cannot be empty".to_string());
+        }
+        check_text("name", &name, NAME_REJECTED_CHARS)?;
+    }
+    if let Some(remarks) = &params.remarks {
+        check_text("remarks", remarks, REMARKS_REJECTED_CHARS)?;
     }
 
     Ok(vec![
@@ -136,6 +164,9 @@ pub fn parse_create_response(body: &str) -> CreateOutcome {
     match field("result") {
         "DONE" | "OK" => CreateOutcome::Accepted,
         "KEY_DUPLICATED" => CreateOutcome::KeyDuplicated(field("errorMsg").to_string()),
+        _ if field("errorMsg").starts_with("Invalid Characters") => {
+            CreateOutcome::InvalidCharacters(field("errorMsg").to_string())
+        }
         other => {
             let message = field("errorMsg");
             CreateOutcome::Failed(if message.is_empty() || message == "~~" {

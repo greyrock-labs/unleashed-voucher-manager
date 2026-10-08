@@ -243,6 +243,9 @@ Required variables come first.
   - Check `UNLEASHED_SSID` names an existing guest WLAN.
   - A custom key must be 2 to 16 characters, without spaces or
     `# & + " ' < > ,`, and not already in use.
+  - Names and remarks must be plain ASCII. Names cannot contain
+    ``' " < > & # ; \ ` | ! $ ( )``, and remarks cannot contain `<` or `>`:
+    the controller refuses these, and garbles accented letters.
 - **Vouchers do not roll when guests connect**
   - Check the guest WLAN redirects to the app's `/welcome` page.
   - Check the reverse proxy appends the client's address to

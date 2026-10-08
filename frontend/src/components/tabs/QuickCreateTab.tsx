@@ -4,6 +4,7 @@ import SuccessModal from "@/components/modals/SuccessModal";
 import { Voucher, VoucherCreateData } from "@/types/voucher";
 import { api } from "@/utils/api";
 import { notify } from "@/utils/notifications";
+import { NAME_REJECTED_CHARS, textProblem } from "@/utils/validation";
 import { useCallback, useState, SubmitEvent } from "react";
 
 export default function QuickCreateTab() {
@@ -17,9 +18,17 @@ export default function QuickCreateTab() {
     const form = e.currentTarget as HTMLFormElement;
     const data = new FormData(form);
 
+    const name = String(data.get("name"));
+    const problem = textProblem("Name", name, NAME_REJECTED_CHARS);
+    if (problem) {
+      notify(problem, "error");
+      setLoading(false);
+      return;
+    }
+
     const payload: VoucherCreateData = {
       count: 1,
-      name: String(data.get("name")),
+      name,
       timeLimitMinutes: Number(data.get("duration")),
       authorizedGuestLimit: 1,
     };

@@ -123,8 +123,14 @@ and `remarks`.
 - **Name and key validation** before sending: names have whitespace replaced
   with `-`; keys must be 2 to 16 characters with no whitespace,
   `# & + " ' < >` or comma.
+- **Name and remarks characters**, probed on the controller: names cannot
+  contain ``' " < > & # ; \ ` | ! $ ( )`` (it answers `OK` and creates
+  nothing), remarks cannot contain `<` or `>` (it answers "Invalid Characters
+  detected"), and both must be printable ASCII (it stores "é" as "Ã©"). The
+  backend rejects these with `400` and the create forms check them first.
 - **Errors:** `KEY_DUPLICATED` becomes `409` with the controller's message;
-  other non-`DONE`/`OK` results become `502`.
+  an "Invalid Characters" result becomes `400`; other non-`DONE`/`OK` results
+  become `502`.
 - After creating, the backend lists and returns the passes that were not there
   before, matching UVM's `VouchersCreateResponse`. The response body alone is
   not trusted: if the list shows no new pass, the create failed and the

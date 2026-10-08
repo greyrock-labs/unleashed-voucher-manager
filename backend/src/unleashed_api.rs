@@ -235,6 +235,10 @@ impl UnleashedAPI {
                 warn!("Create rejected: {message}");
                 return Err(StatusCode::CONFLICT);
             }
+            CreateOutcome::InvalidCharacters(message) => {
+                warn!("Create rejected: {message}");
+                return Err(StatusCode::BAD_REQUEST);
+            }
             CreateOutcome::Failed(message) => {
                 error!("Create failed: {message}");
                 return Err(StatusCode::BAD_GATEWAY);
