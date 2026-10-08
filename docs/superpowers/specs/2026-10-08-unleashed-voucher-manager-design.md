@@ -33,7 +33,7 @@ role has `admin-priv="rw"`. Every probe pass was deleted afterwards.
 | Delete | `POST /admin/_conf.jsp`, `<ajax-request action='delobj' updater='guest-list.<ms>' comp='guest-list'><guest id='N'></guest>…</ajax-request>`. Single and bulk both work. Delete is by `id` only. |
 | Key generation endpoint | `mon_guestdata.jsp` returns an empty key for this account. Not used; send an empty key instead. |
 | Expired passes | The controller removes them by itself, within seconds. |
-| Names | Whitespace is rejected. Brackets, dots and dashes are fine (`[ROLLING]-125714-192.0.2.46` was accepted). Duplicate names are rejected. |
+| Names | A name containing whitespace silently creates nothing: the response is `result=OK` echoing the previous pass's name and key. Brackets, dots and dashes are fine (`[ROLLING]-125714-192.0.2.46` was accepted). Duplicate names are allowed. |
 | Guest portal | A guest WLAN's guest service can set `redirect="url"` with `redirect-url` pointing at the app's `/welcome` page, which is what rolling vouchers need. The probed portal also had `countdown-by-issued="true"`. |
 | `countdown-by-issued` | With it set on the portal, every pass has `start-time` equal to `create-time` and expires at `create-time + valid-time` whether used or not. Use is shown only by `used="true"` and nested `<client mac=…/>` elements. |
 
@@ -67,7 +67,7 @@ which keeps the public method set the handlers already call:
 | `get_rolling_voucher` | List, newest pass named `[ROLLING]-…` that is unused and unexpired |
 | `create_voucher(request)` | Single or batch create, then list to return the created passes |
 | `check_rolling_voucher_ip(ip)`, `create_rolling_voucher(ip)` | As UVM, with the new name prefix |
-| `delete_vouchers_by_ids(ids)` | One `delobj` with every id |
+| `delete_vouchers_by_ids(ids)` | One `delobj` with every existing id. Ids must be numeric; anything else is rejected with `400` before it reaches the XML. |
 | `delete_expired_vouchers`, `delete_expired_rolling_vouchers` | List, filter expired, `delobj` |
 
 Handlers, routes, tasks and the frontend change only where Unleashed forces it.
@@ -123,10 +123,12 @@ and `remarks`.
 - **Name and key validation** before sending: names have whitespace replaced
   with `-`; keys must be 2 to 16 characters with no whitespace,
   `# & + " ' < >` or comma.
-- **Errors:** `KEY_DUPLICATED` and duplicate-name errors become `409` with the
-  controller's message; other non-`DONE`/`OK` results become `502`.
+- **Errors:** `KEY_DUPLICATED` becomes `409` with the controller's message;
+  other non-`DONE`/`OK` results become `502`.
 - After creating, the backend lists and returns the passes that were not there
-  before, matching UVM's `VouchersCreateResponse`.
+  before, matching UVM's `VouchersCreateResponse`. The response body alone is
+  not trusted: if the list shows no new pass, the create failed and the
+  backend answers `502`.
 
 ### Rolling vouchers
 
@@ -139,10 +141,13 @@ current one and refreshes on server-sent events.
 - Current rolling voucher: newest `[ROLLING]-` pass that is unexpired and
   unused (by `used` and clients, not `start-time`).
 - `ROLLING_VOUCHER_DURATION_MINUTES` (default `480`) is rounded up to hours.
+- The guest's address is the first entry of `X-Forwarded-For`, in both the
+  frontend proxy and the backend, so a proxy appending its own address does
+  not break `GUEST_SUBNETWORK` or the one-voucher-per-IP rule.
 - With `countdown-by-issued` on the portal, an unused rolling voucher expires
-  and the controller removes it. The kiosk therefore also re-fetches at the
-  displayed voucher's `expiresAt`; when the fetch finds none, it creates one,
-  as UVM's kiosk already does on load.
+  and the controller removes it. The kiosk therefore also re-fetches every
+  minute, without showing a spinner; when the fetch finds none, it creates
+  one, as UVM's kiosk already does on load.
 
 ### Cleanup
 
@@ -159,7 +164,7 @@ usually find nothing to delete.
 - **Voucher card and details:** drop the data and rate rows; show remarks.
 - **Print:** drop `showDataUsageLimit`, `showRxRateLimit` and
   `showTxRateLimit` from `PRINT_CONFIG`; everything else stays.
-- **Kiosk:** add the re-fetch at `expiresAt`.
+- **Kiosk:** add the once-a-minute re-fetch.
 - **Branding:** UniFi text and logo replaced with neutral Unleashed wording.
   Custom SVG logo mounting works as in UVM.
 - Everything else (Quick Create presets, browse and search, bulk select and
