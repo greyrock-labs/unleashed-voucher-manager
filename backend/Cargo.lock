@@ -114,7 +114,6 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "dotenvy",
- "percent-encoding",
  "reqwest",
  "roxmltree",
  "serde",

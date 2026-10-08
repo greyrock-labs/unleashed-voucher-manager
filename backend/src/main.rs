@@ -11,7 +11,7 @@ use backend::{
     environment::{ENVIRONMENT, Environment},
     handlers::*,
     tasks::run_daily_purge,
-    unifi_api::{UNIFI_API, UnifiAPI},
+    unleashed_api::{ApiConfig, UNLEASHED_API, UnleashedAPI},
 };
 
 #[tokio::main]
@@ -44,17 +44,19 @@ async fn main() {
     let environment = ENVIRONMENT.get().expect("Environment not set");
 
     // =================================
-    // Setup UniFi Controller API connection
+    // Connect to the Unleashed controller
     // =================================
     loop {
-        match UnifiAPI::try_new().await {
+        match UnleashedAPI::try_new(ApiConfig::from_environment(environment)).await {
             Ok(api) => {
-                UNIFI_API.set(api).expect("Failed to set UnifiAPI");
-                info!("Successfully connected to Unifi controller");
+                if UNLEASHED_API.set(api).is_err() {
+                    panic!("UnleashedAPI already initialized");
+                }
+                info!("Connected to the Unleashed controller");
                 break;
             }
             Err(e) => {
-                error!("Failed to initialize UnifiAPI wrapper: {}", e);
+                error!("Failed to connect to the Unleashed controller: {}", e);
                 warn!("Retrying connection in 5 seconds...");
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             }

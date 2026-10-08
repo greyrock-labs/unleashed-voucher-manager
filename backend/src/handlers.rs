@@ -5,13 +5,13 @@ use axum::{
 };
 use tracing::{debug, error, info};
 
-use crate::{models::*, unifi_api::UNIFI_API};
+use crate::{models::*, unleashed_api::UNLEASHED_API};
 
 pub async fn get_vouchers_filtered_handler(
     Query(params): Query<VouchersGetRequest>,
 ) -> Result<Json<VouchersGetResponse>, StatusCode> {
     debug!("Received request to get vouchers");
-    let client = UNIFI_API.get().expect("UnifiAPI not initialized");
+    let client = UNLEASHED_API.get().expect("UnleashedAPI not initialized");
     match client.get_vouchers(&params).await {
         Ok(response) => Ok(Json(response)),
         Err(e) => {
@@ -23,7 +23,7 @@ pub async fn get_vouchers_filtered_handler(
 
 pub async fn get_all_vouchers_handler() -> Result<Json<VouchersGetResponse>, StatusCode> {
     debug!("Received request to get all vouchers");
-    let client = UNIFI_API.get().expect("UnifiAPI not initialized");
+    let client = UNLEASHED_API.get().expect("UnleashedAPI not initialized");
     match client.get_all_vouchers().await {
         Ok(response) => Ok(Json(response)),
         Err(e) => {
@@ -35,7 +35,7 @@ pub async fn get_all_vouchers_handler() -> Result<Json<VouchersGetResponse>, Sta
 
 pub async fn get_rolling_voucher_handler() -> Result<Json<Voucher>, StatusCode> {
     debug!("Received request to get rolling voucher");
-    let client = UNIFI_API.get().expect("UnifiAPI not initialized");
+    let client = UNLEASHED_API.get().expect("UnleashedAPI not initialized");
     match client.get_rolling_voucher().await {
         Ok(Some(voucher)) => Ok(Json(voucher)),
         Ok(None) => Err(StatusCode::NOT_FOUND),
@@ -48,7 +48,7 @@ pub async fn get_rolling_voucher_handler() -> Result<Json<Voucher>, StatusCode> 
 
 pub async fn get_newest_voucher_handler() -> Result<Json<Voucher>, StatusCode> {
     debug!("Received request to get newest voucher");
-    let client = UNIFI_API.get().expect("UnifiAPI not initialized");
+    let client = UNLEASHED_API.get().expect("UnleashedAPI not initialized");
     match client.get_newest_voucher().await {
         Ok(voucher) => Ok(Json(voucher)),
         Err(e) => {
@@ -62,7 +62,7 @@ pub async fn get_voucher_details_handler(
     Query(params): Query<VoucherDetailsRequest>,
 ) -> Result<Json<Voucher>, StatusCode> {
     debug!("Received request to get voucher details");
-    let client = UNIFI_API.get().expect("UnifiAPI not initialized");
+    let client = UNLEASHED_API.get().expect("UnleashedAPI not initialized");
     match client.get_voucher_details(params.id).await {
         Ok(voucher) => Ok(Json(voucher)),
         Err(e) => {
@@ -76,7 +76,7 @@ pub async fn create_voucher_handler(
     Json(request): Json<VouchersCreateRequest>,
 ) -> Result<Json<VouchersCreateResponse>, StatusCode> {
     debug!("Received request to create voucher");
-    let client = UNIFI_API.get().expect("UnifiAPI not initialized");
+    let client = UNLEASHED_API.get().expect("UnleashedAPI not initialized");
     match client.create_voucher(&request).await {
         Ok(response) => Ok(Json(response)),
         Err(e) => {
@@ -91,10 +91,11 @@ pub async fn create_rolling_voucher_handler(
 ) -> Result<Json<Voucher>, StatusCode> {
     debug!("Received request to create voucher");
 
-    let client = UNIFI_API.get().expect("UnifiAPI not initialized");
+    let client = UNLEASHED_API.get().expect("UnleashedAPI not initialized");
 
     if let Some(forwarded) = headers.get("x-forwarded-for")
-        && let Ok(ip) = forwarded.to_str()
+        && let Ok(forwarded) = forwarded.to_str()
+        && let Some(ip) = first_forwarded_ip(forwarded)
     {
         debug!("Client IP from x-forwarded-for: {}", ip);
 
@@ -122,7 +123,7 @@ pub async fn delete_selected_handler(
     Query(params): Query<VouchersDeleteRequest>,
 ) -> Result<Json<DeleteResponse>, StatusCode> {
     debug!("Received request to delete selected vouchers");
-    let client = UNIFI_API.get().expect("UnifiAPI not initialized");
+    let client = UNLEASHED_API.get().expect("UnleashedAPI not initialized");
     let ids = params.ids.split(',').map(|s| s.to_string()).collect();
     match client.delete_vouchers_by_ids(ids).await {
         Ok(response) => Ok(Json(response)),
@@ -135,7 +136,7 @@ pub async fn delete_selected_handler(
 
 pub async fn delete_expired_handler() -> Result<Json<DeleteResponse>, StatusCode> {
     debug!("Received request to delete expired vouchers");
-    let client = UNIFI_API.get().expect("UnifiAPI not initialized");
+    let client = UNLEASHED_API.get().expect("UnleashedAPI not initialized");
     match client.delete_expired_vouchers().await {
         Ok(response) => Ok(Json(response)),
         Err(e) => {
@@ -147,7 +148,7 @@ pub async fn delete_expired_handler() -> Result<Json<DeleteResponse>, StatusCode
 
 pub async fn delete_expired_rolling_handler() -> Result<Json<DeleteResponse>, StatusCode> {
     debug!("Received request to delete expired rolling voucher");
-    let client = UNIFI_API.get().expect("UnifiAPI not initialized");
+    let client = UNLEASHED_API.get().expect("UnleashedAPI not initialized");
     match client.delete_expired_rolling_vouchers().await {
         Ok(response) => Ok(Json(response)),
         Err(e) => {
@@ -163,4 +164,14 @@ pub async fn health_check_handler() -> Result<Json<HealthCheckResponse>, StatusC
         status: "ok".to_string(),
     };
     Ok(Json(response))
+}
+
+/// The client address from an `X-Forwarded-For` value: the first entry of a
+/// comma-separated list, trimmed.
+pub fn first_forwarded_ip(header: &str) -> Option<&str> {
+    header
+        .split(',')
+        .next()
+        .map(str::trim)
+        .filter(|ip| !ip.is_empty())
 }

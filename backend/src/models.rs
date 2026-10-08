@@ -32,12 +32,11 @@ pub struct VouchersCreateRequest {
     pub authorized_guest_limit: Option<u64>,
     #[serde(rename = "timeLimitMinutes")]
     pub time_limit_minutes: u64,
-    #[serde(rename = "dataUsageLimitMBytes")]
-    pub data_usage_limit_mbytes: Option<u64>,
-    #[serde(rename = "rxRateLimitKbps")]
-    pub rx_rate_limit_kbps: Option<u64>,
-    #[serde(rename = "txRateLimitKbps")]
-    pub tx_rate_limit_kbps: Option<u64>,
+    /// A custom pass key; only for a count of 1.
+    #[serde(default)]
+    pub code: Option<String>,
+    #[serde(default)]
+    pub remarks: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -82,36 +81,4 @@ pub struct VouchersDeleteRequest {
 #[derive(Debug, Deserialize)]
 pub struct VoucherDetailsRequest {
     pub id: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Site {
-    pub id: String,
-    #[serde(rename = "internalReference")]
-    pub internal_reference: String,
-    pub name: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct GetSitesResponse {
-    offset: u64,
-    limit: u32,
-    count: u32,
-    #[serde(rename = "totalCount")]
-    total_count: u32,
-    pub data: Vec<Site>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ErrorResponse {
-    #[serde(rename = "statusCode")]
-    pub status_code: i32,
-    #[serde(rename = "statusName")]
-    pub status_name: String,
-    pub message: String,
-    timestamp: String,
-    #[serde(rename = "requestPath")]
-    request_path: String,
-    #[serde(rename = "requestId")]
-    request_id: String,
 }
