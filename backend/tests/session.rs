@@ -1,6 +1,11 @@
 mod support;
 
 use backend::unleashed::session::{Session, SessionError};
+use std::{
+    io::Write,
+    sync::{Arc, Mutex},
+};
+
 use support::{Mock, PASSWORD, USERNAME};
 
 const LIST: &str = "<ajax-request action='getconf' comp='guest-list'/>";
@@ -84,4 +89,54 @@ async fn gives_up_after_one_relogin() {
 async fn unreachable_controller_is_a_connect_error() {
     let s = Session::new("http://127.0.0.1:9", USERNAME, PASSWORD, true).unwrap();
     assert!(matches!(s.login().await, Err(SessionError::Connect(_))));
+}
+
+/// Collects everything logged while `f` runs.
+async fn logged<F: std::future::Future>(f: F) -> (F::Output, String) {
+    #[derive(Clone)]
+    struct Buffer(Arc<Mutex<Vec<u8>>>);
+    impl Write for Buffer {
+        fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(data);
+            Ok(data.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let buffer = Buffer(Arc::new(Mutex::new(Vec::new())));
+    let writer = buffer.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .with_writer(move || writer.clone())
+        .finish();
+    let _guard = tracing::subscriber::set_default(subscriber);
+    let output = f.await;
+    let text = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+    (output, text)
+}
+
+#[tokio::test]
+async fn a_failed_login_request_does_not_leak_the_password() {
+    let mock = Mock::start().await;
+    // The login page is on a port nothing listens on, so the login GET,
+    // which carries the password in its query, fails to connect.
+    mock.state.lock().unwrap().login_location =
+        Some("http://127.0.0.1:9/admin/login.jsp".to_string());
+    let s = session(&mock, PASSWORD);
+    let (result, logs) = logged(s.login()).await;
+    let error = result.unwrap_err().to_string();
+    assert!(!error.contains(PASSWORD), "error leaks the password: {error}");
+    assert!(!logs.contains(PASSWORD), "logs leak the password: {logs}");
+}
+
+#[tokio::test]
+async fn a_bad_login_redirect_does_not_leak_the_password() {
+    let mock = Mock::start().await;
+    mock.state.lock().unwrap().login_redirect_without_location = true;
+    let s = session(&mock, PASSWORD);
+    let (result, logs) = logged(s.login()).await;
+    let error = result.unwrap_err().to_string();
+    assert!(!error.contains(PASSWORD), "error leaks the password: {error}");
+    assert!(!logs.contains(PASSWORD), "logs leak the password: {logs}");
 }

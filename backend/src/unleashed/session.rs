@@ -228,7 +228,7 @@ fn redirect_target(response: &reqwest::Response) -> Result<Url, SessionError> {
         .ok_or_else(|| {
             SessionError::Connect(format!(
                 "expected a redirect from {}, got {}",
-                response.url(),
+                without_query(response.url()),
                 response.status()
             ))
         })?;
@@ -238,7 +238,16 @@ fn redirect_target(response: &reqwest::Response) -> Result<Url, SessionError> {
         .map_err(|e| SessionError::Connect(format!("bad redirect {location:?}: {e}")))
 }
 
+/// The login request carries the password in its query, so request URLs
+/// never reach logs or error messages.
 fn connect_error(e: reqwest::Error) -> SessionError {
+    let e = e.without_url();
     warn!("Controller request failed: {e}");
-    SessionError::Connect(e.without_url().to_string())
+    SessionError::Connect(e.to_string())
+}
+
+fn without_query(url: &Url) -> String {
+    let mut url = url.clone();
+    url.set_query(None);
+    url.to_string()
 }

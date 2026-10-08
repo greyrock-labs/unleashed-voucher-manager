@@ -45,6 +45,12 @@ pub struct MockState {
     pub token_in_script_only: bool,
     /// Answer every create with OK and create nothing.
     pub ignore_creates: bool,
+    /// Where `GET /` sends the client to log in, instead of this mock.
+    pub login_location: Option<String>,
+    /// Answer a successful login with a redirect that has no `Location`.
+    pub login_redirect_without_location: bool,
+    /// Delay every create, so concurrent creates overlap.
+    pub create_delay_ms: u64,
     pub passes: Vec<MockPass>,
     next_id: u32,
     /// Every `mon_createguest.jsp` form received.
@@ -149,8 +155,9 @@ fn authorised(state: &MockState, headers: &HeaderMap) -> bool {
     matches!(state.sessions.get(&cookie), Some((t, true)) if Some(t.as_str()) == token)
 }
 
-async fn root() -> Response {
-    redirect("/admin/login.jsp")
+async fn root(State(state): State<Arc<Mutex<MockState>>>) -> Response {
+    let location = state.lock().unwrap().login_location.clone();
+    redirect(location.as_deref().unwrap_or("/admin/login.jsp"))
 }
 
 async fn login(
@@ -167,7 +174,11 @@ async fn login(
     let cookie = format!("s{}", s.logins);
     let token = format!("t{}", s.logins);
     s.sessions.insert(cookie.clone(), (token.clone(), false));
-    let mut response = redirect("/admin/dashboard.jsp");
+    let mut response = if s.login_redirect_without_location {
+        StatusCode::FOUND.into_response()
+    } else {
+        redirect("/admin/dashboard.jsp")
+    };
     let headers = response.headers_mut();
     headers.insert(
         header::SET_COOKIE,
@@ -273,6 +284,8 @@ async fn create_guest(
     headers: HeaderMap,
     Form(form): Form<HashMap<String, String>>,
 ) -> Response {
+    let delay = state.lock().unwrap().create_delay_ms;
+    tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
     let mut s = state.lock().unwrap();
     if s.always_redirect || !authorised(&s, &headers) {
         return redirect("/admin/login.jsp");
