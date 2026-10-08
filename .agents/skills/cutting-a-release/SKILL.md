@@ -26,7 +26,10 @@ tag. There is nothing to bump before tagging; the tag is the bump.
 git status --short                      # clean tree
 git rev-parse HEAD origin/main          # identical; push main first if not
 (cd backend && cargo test --locked)     # what the release job runs
-(cd frontend && npx tsc --noEmit && npm run build)
+(cd frontend && npx tsc --noEmit && npm test && npm run build)
+# ...and CI on origin/main must have passed for HEAD. It runs on Node 24 and
+# can fail where a newer local toolchain passes. Check with the Forgejo API:
+#   /api/v1/repos/<owner>/<repo>/actions/tasks, filtered on head_sha
 
 # 2. What is going into this release
 git describe --tags --abbrev=0          # last tag
