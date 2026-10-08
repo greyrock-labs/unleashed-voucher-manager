@@ -20,9 +20,12 @@ const guestAllowedPaths = [
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Extract client IP: the first entry when proxies appended their own
+  // Extract client IP: the last X-Forwarded-For entry, which the reverse
+  // proxy in front of the app appended. Earlier entries come from the client
+  // and can be forged.
   let clientIp = (request.headers.get("x-forwarded-for") || "")
-    .split(",")[0]
+    .split(",")
+    .pop()!
     .trim();
 
   // Strip IPv6 prefix if it's a mapped IPv4
@@ -54,11 +57,11 @@ export function proxy(request: NextRequest) {
       `${backendUrl}:${backendPort}${backendPath}${request.nextUrl.search}`,
     );
 
-    const response = NextResponse.rewrite(backendFullUrl, { request });
-
-    // Forward the real client IP
-    response.headers.set("x-forwarded-for", clientIp);
-    return response;
+    // Forward only the client IP chosen above, so the backend never sees the
+    // forgeable entries
+    const headers = new Headers(request.headers);
+    headers.set("x-forwarded-for", clientIp);
+    return NextResponse.rewrite(backendFullUrl, { request: { headers } });
   }
 
   return NextResponse.next();

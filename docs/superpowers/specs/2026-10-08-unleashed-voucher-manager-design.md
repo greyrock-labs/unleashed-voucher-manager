@@ -141,9 +141,11 @@ current one and refreshes on server-sent events.
 - Current rolling voucher: newest `[ROLLING]-` pass that is unexpired and
   unused (by `used` and clients, not `start-time`).
 - `ROLLING_VOUCHER_DURATION_MINUTES` (default `480`) is rounded up to hours.
-- The guest's address is the first entry of `X-Forwarded-For`, in both the
-  frontend proxy and the backend, so a proxy appending its own address does
-  not break `GUEST_SUBNETWORK` or the one-voucher-per-IP rule.
+- The guest's address is the last entry of `X-Forwarded-For`, the one the
+  reverse proxy in front of the app appended; earlier entries come from the
+  client and can be forged. The frontend proxy picks that entry, uses it for
+  `GUEST_SUBNETWORK`, and forwards only it to the backend, which rejects with
+  `400` anything that is not an IP address.
 - With `countdown-by-issued` on the portal, an unused rolling voucher expires
   and the controller removes it. The kiosk therefore also re-fetches every
   minute, without showing a spinner; when the fetch finds none, it creates
@@ -227,9 +229,10 @@ Manager role cannot delete. The README explains how to create one.
 
 - The controller's guest portal must redirect to the app's `/welcome` page
   for rolling vouchers to roll.
-- The reverse proxy in front of the app must pass the client's real address in
-  `X-Forwarded-For`. `GUEST_SUBNETWORK` gating and the one-voucher-per-IP rule
-  depend on it.
+- The reverse proxy directly in front of the app must append (or set) the
+  client's address in `X-Forwarded-For`, and the app's port must not be
+  reachable from the guest network directly. `GUEST_SUBNETWORK` gating and the
+  one-voucher-per-IP rule depend on it.
 - The app must be able to reach the controller over HTTPS.
 
 ## Out of scope

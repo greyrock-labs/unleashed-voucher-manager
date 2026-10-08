@@ -1,3 +1,5 @@
+use std::net::IpAddr;
+
 use axum::{
     extract::Query,
     http::{HeaderMap, StatusCode},
@@ -95,8 +97,10 @@ pub async fn create_rolling_voucher_handler(
 
     if let Some(forwarded) = headers.get("x-forwarded-for")
         && let Ok(forwarded) = forwarded.to_str()
-        && let Some(ip) = first_forwarded_ip(forwarded)
+        && let Some(ip) = forwarded_client_ip(forwarded)
     {
+        let ip = ip.to_string();
+        let ip = ip.as_str();
         debug!("Client IP from x-forwarded-for: {}", ip);
 
         // One rolling voucher per IP; the API answers FORBIDDEN otherwise
@@ -161,12 +165,14 @@ pub async fn health_check_handler() -> Result<Json<HealthCheckResponse>, StatusC
     Ok(Json(response))
 }
 
-/// The client address from an `X-Forwarded-For` value: the first entry of a
-/// comma-separated list, trimmed.
-pub fn first_forwarded_ip(header: &str) -> Option<&str> {
-    header
-        .split(',')
-        .next()
-        .map(str::trim)
-        .filter(|ip| !ip.is_empty())
+/// The client address the frontend forwards in `X-Forwarded-For`: the first
+/// entry, which must parse as an IP address. The frontend puts the address
+/// the reverse proxy saw there; anything else is rejected, so arbitrary text
+/// never reaches a pass name.
+pub fn forwarded_client_ip(header: &str) -> Option<IpAddr> {
+    let first = header.split(',').next()?.trim();
+    match first.parse().ok()? {
+        IpAddr::V6(v6) => Some(v6.to_ipv4_mapped().map_or(IpAddr::V6(v6), IpAddr::V4)),
+        v4 => Some(v4),
+    }
 }
