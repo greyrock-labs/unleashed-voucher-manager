@@ -139,10 +139,17 @@ depend on it.
 
 ### Custom SVG logo
 
-- With Docker, mount the SVG at `/app/frontend/public/logo.svg`. There is an
-  example in `compose.yaml`. The mount destination, including the file name,
-  **cannot be changed**.
-- Without Docker, place the SVG at `./frontend/public/logo.svg`.
+The header shows `logo.svg`, and the centre of the WiFi QR code shows
+`qr-logo.svg` (the RUCKUS dog by default). Either can be replaced:
+
+- With Docker, mount the SVG at `/app/frontend/public/logo.svg` or
+  `/app/frontend/public/qr-logo.svg`. There is an example in `compose.yaml`.
+  The mount destination, including the file name, **cannot be changed**.
+- Without Docker, place the SVG at `./frontend/public/logo.svg` or
+  `./frontend/public/qr-logo.svg`.
+
+The QR code is drawn in the page's text colour on a transparent background,
+so give `qr-logo.svg` its own background to keep it visible in both themes.
 
 ### Environment variables
 

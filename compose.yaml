@@ -14,9 +14,10 @@ services:
     ports:
       - "3000:3000"
 
-    # Display your custom SVG logo. The mount destination CANNOT BE CHANGED.
+    # Display your custom SVG logos. The mount destinations CANNOT BE CHANGED.
     # volumes:
     #   - "./assets/my_logo.svg:/app/frontend/public/logo.svg"
+    #   - "./assets/my_qr_logo.svg:/app/frontend/public/qr-logo.svg"
 
     # SEE README FOR ENVIRONMENT VARIABLES DOCUMENTATION
     environment:
