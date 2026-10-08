@@ -1,9 +1,7 @@
 ---
 services:
-  unifi-voucher-manager:
-    image: "docker.io/etiennecollin/unifi-voucher-manager:latest"
-    # Or use the github registry
-    # image: "ghcr.io/etiennecollin/unifi-voucher-manager:latest"
+  unleashed-voucher-manager:
+    image: "ghcr.io/greyrock-labs/unleashed-voucher-manager:latest"
 
     # To build the image yourself
     # build:
@@ -11,7 +9,7 @@ services:
     #   target: "runtime"
     #   dockerfile: "./Dockerfile"
 
-    container_name: "unifi-voucher-manager"
+    container_name: "unleashed-voucher-manager"
     restart: "unless-stopped"
     ports:
       - "3000:3000"
@@ -22,10 +20,12 @@ services:
 
     # SEE README FOR ENVIRONMENT VARIABLES DOCUMENTATION
     environment:
-      UNIFI_CONTROLLER_URL: "URL to your UniFi controller with protocol (`http://` or `https://`)."
-      UNIFI_API_KEY: "API Key for your UniFi controller."
-      UNIFI_HAS_VALID_CERT: "true" # Set to false only if your UniFi controller does not use a valid SSL certificate. Typically, this should remain true when accessing the controller (UNIFI_CONTROLLER_URL) through a reverse proxy or any setup providing trusted SSL certificates (e.g., Let's Encrypt).
+      UNLEASHED_URL: "URL of your Unleashed controller with protocol (`https://`)."
+      UNLEASHED_USERNAME: "Controller user whose role has read-write admin privilege."
+      UNLEASHED_PASSWORD: "Password for that user."
+      UNLEASHED_SSID: "The guest WLAN that vouchers are created on."
+      UNLEASHED_HAS_VALID_CERT: "true" # Set to false only if the controller serves a self-signed certificate.
       WIFI_SSID: "Your guest WiFi SSID" # Optional, but recommended
-      WIFI_PASSWORD: "Youw guest WiFi password" # Optional, but recommended
+      WIFI_PASSWORD: "Your guest WiFi password" # Optional, but recommended
       GUEST_SUBNETWORK: "Your guest subnetwork in IPv4 CIDR notation (X.X.X.X/X)" # Optional, but recommended
       TIMEZONE: "Your timezone (America/Toronto)" # Optional, but recommended

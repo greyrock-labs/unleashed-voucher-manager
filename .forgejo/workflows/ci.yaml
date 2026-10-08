@@ -1,0 +1,39 @@
+---
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Build and test backend
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build
+        run: cd backend && cargo build --locked
+
+      - name: Run tests
+        run: cd backend && cargo test --locked
+
+  frontend:
+    name: Build frontend
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install dependencies
+        run: cd frontend && npm ci
+
+      - name: Typecheck
+        run: cd frontend && npx tsc --noEmit
+
+      - name: Build
+        run: cd frontend && npm run build
