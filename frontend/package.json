@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --test src"
+    "test": "node --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "next": "16.4.0",
