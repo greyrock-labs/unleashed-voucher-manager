@@ -126,7 +126,10 @@ async fn a_failed_login_request_does_not_leak_the_password() {
     let s = session(&mock, PASSWORD);
     let (result, logs) = logged(s.login()).await;
     let error = result.unwrap_err().to_string();
-    assert!(!error.contains(PASSWORD), "error leaks the password: {error}");
+    assert!(
+        !error.contains(PASSWORD),
+        "error leaks the password: {error}"
+    );
     assert!(!logs.contains(PASSWORD), "logs leak the password: {logs}");
 }
 
@@ -137,6 +140,9 @@ async fn a_bad_login_redirect_does_not_leak_the_password() {
     let s = session(&mock, PASSWORD);
     let (result, logs) = logged(s.login()).await;
     let error = result.unwrap_err().to_string();
-    assert!(!error.contains(PASSWORD), "error leaks the password: {error}");
+    assert!(
+        !error.contains(PASSWORD),
+        "error leaks the password: {error}"
+    );
     assert!(!logs.contains(PASSWORD), "logs leak the password: {logs}");
 }

@@ -3,7 +3,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::Json,
 };
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 use crate::{models::*, unleashed_api::UNLEASHED_API};
 
@@ -99,15 +99,10 @@ pub async fn create_rolling_voucher_handler(
     {
         debug!("Client IP from x-forwarded-for: {}", ip);
 
-        // Check if user already rotated the rolling voucher
-        if client.check_rolling_voucher_ip(ip).await? {
-            info!("Rolling voucher already rotated for IP: {}", ip);
-            return Err(StatusCode::FORBIDDEN);
-        }
-
-        // Voucher rotation allowed, create a new rolling voucher
+        // One rolling voucher per IP; the API answers FORBIDDEN otherwise
         match client.create_rolling_voucher(ip).await {
             Ok(response) => return Ok(Json(response)),
+            Err(StatusCode::FORBIDDEN) => return Err(StatusCode::FORBIDDEN),
             Err(e) => {
                 error!("Failed to create rolling voucher: {}", e);
                 return Err(e);

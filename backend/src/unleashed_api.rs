@@ -3,6 +3,8 @@
 
 use std::{collections::HashSet, sync::OnceLock};
 
+use tokio::sync::Mutex;
+
 use chrono::Utc;
 use chrono_tz::Tz;
 use reqwest::StatusCode;
@@ -52,6 +54,10 @@ impl ApiConfig {
 pub struct UnleashedAPI {
     session: Session,
     config: ApiConfig,
+    /// Held from the guest list before a create to the list after it, so
+    /// concurrent creates cannot claim each other's new passes, and so the
+    /// rolling voucher check and create happen as one step.
+    create_lock: Mutex<()>,
 }
 
 impl UnleashedAPI {
@@ -65,7 +71,11 @@ impl UnleashedAPI {
         )
         .map_err(|e| e.to_string())?;
         session.login().await.map_err(|e| e.to_string())?;
-        Ok(Self { session, config })
+        Ok(Self {
+            session,
+            config,
+            create_lock: Mutex::new(()),
+        })
     }
 
     fn now() -> i64 {
@@ -158,6 +168,15 @@ impl UnleashedAPI {
         &self,
         request: &VouchersCreateRequest,
     ) -> Result<VouchersCreateResponse, StatusCode> {
+        let _guard = self.create_lock.lock().await;
+        self.create_locked(request).await
+    }
+
+    /// Create passes; the caller holds `create_lock`.
+    async fn create_locked(
+        &self,
+        request: &VouchersCreateRequest,
+    ) -> Result<VouchersCreateResponse, StatusCode> {
         let params = CreateParams {
             count: request.count,
             name: request.name.clone(),
@@ -217,7 +236,15 @@ impl UnleashedAPI {
         Ok(has_live_rolling_for_ip(&passes, ip, Self::now()))
     }
 
+    /// Mint the next rolling voucher for `ip`. `FORBIDDEN` when that address
+    /// already has a rolling voucher that has not expired.
     pub async fn create_rolling_voucher(&self, ip: &str) -> Result<Voucher, StatusCode> {
+        let _guard = self.create_lock.lock().await;
+        let passes = self.list_passes().await?;
+        if has_live_rolling_for_ip(&passes, ip, Self::now()) {
+            info!("Rolling voucher already rotated for IP: {ip}");
+            return Err(StatusCode::FORBIDDEN);
+        }
         let request = VouchersCreateRequest {
             count: 1,
             name: rolling_name(Utc::now().with_timezone(&self.config.timezone), ip),
@@ -226,7 +253,7 @@ impl UnleashedAPI {
             code: None,
             remarks: None,
         };
-        self.create_voucher(&request)
+        self.create_locked(&request)
             .await?
             .vouchers
             .into_iter()

@@ -299,3 +299,51 @@ async fn survives_a_controller_reboot() {
     assert!(api.get_all_vouchers().await.is_ok());
     assert_eq!(mock.logins(), 2);
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_creates_return_only_their_own_pass() {
+    let mock = Mock::start().await;
+    mock.state.lock().unwrap().create_delay_ms = 100;
+    let api = std::sync::Arc::new(api(&mock).await);
+    let calls: Vec<_> = ["one", "two"]
+        .into_iter()
+        .map(|name| {
+            let api = api.clone();
+            tokio::spawn(async move { api.create_voucher(&request(1, name)).await })
+        })
+        .collect();
+    for (call, name) in calls.into_iter().zip(["one", "two"]) {
+        let created = call.await.unwrap().unwrap();
+        let names: Vec<&str> = created.vouchers.iter().map(|v| v.name.as_str()).collect();
+        assert_eq!(names, vec![name], "a create returned another create's pass");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn one_ip_gets_one_rolling_voucher_even_when_requests_overlap() {
+    let mock = Mock::start().await;
+    mock.state.lock().unwrap().create_delay_ms = 100;
+    let api = std::sync::Arc::new(api(&mock).await);
+    let calls: Vec<_> = (0..2)
+        .map(|_| {
+            let api = api.clone();
+            tokio::spawn(async move { api.create_rolling_voucher("192.0.2.5").await })
+        })
+        .collect();
+    let mut results = Vec::new();
+    for call in calls {
+        results.push(call.await.unwrap());
+    }
+    assert_eq!(
+        results.iter().filter(|r| r.is_ok()).count(),
+        1,
+        "{results:?}"
+    );
+    assert!(
+        results
+            .iter()
+            .any(|r| matches!(r, Err(StatusCode::FORBIDDEN))),
+        "{results:?}"
+    );
+    assert_eq!(mock.pass_ids().len(), 1);
+}
