@@ -59,10 +59,10 @@ Follow `.agents/skills/cutting-a-release/SKILL.md`: signed annotated tag on
 
 ## Renovate
 
-- Renovate names its branches `renovate-...`. Its npm updates change
-  `frontend/package.json` without updating `package-lock.json`, so their CI
-  fails on `npm ci`. Apply them on `main` with `npm install` so the lockfile
-  is in the same commit, then close the pull request.
+- Renovate names its branches `renovate-...`. Review npm updates in both
+  `frontend/package.json` and `package-lock.json`; run `npm install` to
+  reconcile the lockfile, then verify with `npm ci`. Apply updates on `main`
+  as linear commits, then close the pull requests.
 - Renovate only prunes branches with its configured prefix; it never removes
   `renovate/configure` after its onboarding pull request is closed by hand.
 - The Renovate Dependency Dashboard issue is meant to stay open.
