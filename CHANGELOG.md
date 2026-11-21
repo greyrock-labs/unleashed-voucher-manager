@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.1] - 2026-11-21
+
+### Bug Fixes
+
+- **deps:** Update react monorepo (#3)
+
 ## [1.0.0] - 2026-11-20
 
 ### Features
