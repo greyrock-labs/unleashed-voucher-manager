@@ -106,6 +106,10 @@ The controller serves real guests, so:
   be re-run safely.
 - Pushes to `main` publish no images. There are no `:main`, `:sha-*` or `X.Y`
   tags; ask before adding any tag that moves.
+- The Test workflow's image build keeps a BuildKit cache in the release bot's
+  container registry on Forgejo, as `unleashed-voucher-manager-cache:amd64`.
+  It is a cache, not an image: never pull or deploy it. Runs without the
+  secret build without it, and a failed cache upload never fails the build.
 
 Versions come from conventional commits (git-cliff, `cliff.toml`; before the
 first tag, the first release is its `initial_tag`, `v1.0.0`):
@@ -125,7 +129,8 @@ else is `chore` and never carries `!`.
 The scripts behind this live in `.forgejo/scripts/`, and
 `mise run release-scripts-test` tests them. Repository secrets:
 `RELEASE_BOT_TOKEN` (the `keymaker` Forgejo token, with repository and issue
-write plus `read:user` for its own name and email), `GHCR_TOKEN` (a GitHub
+write, `read:user` for its own name and email, and package write for the build
+cache), `GHCR_TOKEN` (a GitHub
 classic PAT with `write:packages` and `public_repo`, used for image pushes and
 GitHub releases), and `COSIGN_PRIVATE_KEY` plus `COSIGN_PASSWORD` (the signing
 key; the public half is `cosign.pub`). Images carry an SBOM but no provenance

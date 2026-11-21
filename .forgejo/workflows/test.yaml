@@ -66,12 +66,47 @@ jobs:
       - name: Set up Docker Buildx
         uses: https://github.com/docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
+      # The build cache lives in the release bot's container registry on this
+      # Forgejo, so dependency layers are reused between runs. Runs without the
+      # secret (pull requests from forks) build without a cache.
+      - name: Find build cache
+        id: cache
+        env:
+          RELEASE_BOT_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN }}
+          FORGEJO_SERVER_URL: ${{ forgejo.server_url }}
+        run: |
+          if [[ -z "$RELEASE_BOT_TOKEN" ]]; then
+            echo "No RELEASE_BOT_TOKEN: building without a cache."
+            exit 0
+          fi
+          login="$(curl -fsS -H "Authorization: token $RELEASE_BOT_TOKEN" "$FORGEJO_SERVER_URL/api/v1/user" | jq -r .login)"
+          host="${FORGEJO_SERVER_URL#*://}"
+          host="${host%/}"
+          {
+            echo "registry=$host"
+            echo "username=$login"
+            echo "ref=$host/$login/unleashed-voucher-manager-cache:amd64"
+          } >> "$GITHUB_OUTPUT"
+
+      # Like the cache itself, a failed login must not fail the build.
+      - name: Log in to the cache registry
+        if: steps.cache.outputs.ref != ''
+        continue-on-error: true
+        uses: https://github.com/docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ${{ steps.cache.outputs.registry }}
+          username: ${{ steps.cache.outputs.username }}
+          password: ${{ secrets.RELEASE_BOT_TOKEN }}
+
       - name: Build image
         uses: https://github.com/docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           push: false
           platforms: linux/amd64
+          cache-from: ${{ steps.cache.outputs.ref && format('type=registry,ref={0}', steps.cache.outputs.ref) || '' }}
+          # A failed cache upload never fails the build.
+          cache-to: ${{ steps.cache.outputs.ref && format('type=registry,ref={0},mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true', steps.cache.outputs.ref) || '' }}
           build-args: |
             RUST_VERSION=${{ steps.versions.outputs.rust }}
             NODE_VERSION=${{ steps.versions.outputs.node }}
