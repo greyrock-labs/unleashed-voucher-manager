@@ -1,6 +1,6 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
-  extends: ["local>todd/renovate-config"],
+  extends: ["local>greyrock-labs/renovate-config"],
   // Keep package-lock.json in step with package.json and refresh it weekly.
   lockFileMaintenance: { enabled: true },
   postUpdateOptions: ["npmDedupe"],
