@@ -74,14 +74,20 @@ jobs:
         env:
           RELEASE_BOT_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN }}
           FORGEJO_SERVER_URL: ${{ forgejo.server_url }}
+          FORGEJO_REPOSITORY: ${{ forgejo.repository }}
         run: |
           if [[ -z "$RELEASE_BOT_TOKEN" ]]; then
             echo "No RELEASE_BOT_TOKEN: building without a cache."
             exit 0
           fi
-          login="$(curl -fsS -H "Authorization: token $RELEASE_BOT_TOKEN" "$FORGEJO_SERVER_URL/api/v1/user" | jq -r .login)"
-          host="${FORGEJO_SERVER_URL#*://}"
-          host="${host%/}"
+          api="$FORGEJO_SERVER_URL/api/v1"
+          auth="Authorization: token $RELEASE_BOT_TOKEN"
+          login="$(curl -fsS -H "$auth" "$api/user" | jq -r .login)"
+          # The runner may reach Forgejo by an internal plain-HTTP address,
+          # which Docker refuses as a registry. Use the public address.
+          html_url="$(curl -fsS -H "$auth" "$api/repos/$FORGEJO_REPOSITORY" | jq -r .html_url)"
+          host="${html_url#*://}"
+          host="${host%%/*}"
           {
             echo "registry=$host"
             echo "username=$login"
