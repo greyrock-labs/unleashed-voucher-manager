@@ -115,8 +115,10 @@ jobs:
           push: false
           platforms: linux/amd64
           cache-from: ${{ steps.cache.outputs.ref && format('type=registry,ref={0}', steps.cache.outputs.ref) || '' }}
-          # A failed cache upload never fails the build.
-          cache-to: ${{ steps.cache.outputs.ref && format('type=registry,ref={0},mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true', steps.cache.outputs.ref) || '' }}
+          # Only pushes to main write the cache. Each export replaces the whole
+          # ref, so a pull request that changes a lockfile would otherwise evict
+          # main's layers. A failed cache upload never fails the build.
+          cache-to: ${{ forgejo.event_name == 'push' && steps.cache.outputs.ref && format('type=registry,ref={0},mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true', steps.cache.outputs.ref) || '' }}
           build-args: |
             RUST_VERSION=${{ steps.versions.outputs.rust }}
             NODE_VERSION=${{ steps.versions.outputs.node }}

@@ -108,8 +108,10 @@ The controller serves real guests, so:
   tags; ask before adding any tag that moves.
 - The Test workflow's image build keeps a BuildKit cache in the release bot's
   container registry on Forgejo, as `unleashed-voucher-manager-cache:amd64`.
-  It is a cache, not an image: never pull or deploy it. Runs without the
-  secret build without it, and a failed cache upload never fails the build.
+  It is a cache, not an image: never pull or deploy it. Only pushes to `main`
+  write it; pull requests only read it, so one that changes a lockfile cannot
+  evict `main`'s layers. Runs without the secret build without it, and a
+  failed cache upload never fails the build.
 
 Versions come from conventional commits (git-cliff, `cliff.toml`; before the
 first tag, the first release is its `initial_tag`, `v1.0.0`):
