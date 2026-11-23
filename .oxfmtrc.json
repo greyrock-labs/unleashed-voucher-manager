@@ -4,6 +4,7 @@
     "backend/**",
     "frontend/src/**",
     "frontend/package-lock.json",
+    ".mise/locks/**",
     ".superpowers/**"
   ]
 }
