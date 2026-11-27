@@ -233,9 +233,9 @@ specifiers = ["0.79.0"]
 repository = "github.com/oxc-project/oxc"
 
 [[tools.rust]]
-version = "1.100.0"
+version = "1.100.1"
 backend = "core:rust"
-specifiers = ["1.100.0"]
+specifiers = ["1.100.1"]
 
 [tools.rust.options]
 components = "clippy,rustfmt"
